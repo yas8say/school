@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-01-10 21:24:25.021210",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "twilio_account_sid",
+  "twilio_auth_token",
+  "twilio_service_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "twilio_account_sid",
+   "fieldtype": "Data",
+   "label": "Twilio Account SID"
+  },
+  {
+   "fieldname": "twilio_auth_token",
+   "fieldtype": "Data",
+   "label": "Twilio Auth Token"
+  },
+  {
+   "fieldname": "twilio_service_id",
+   "fieldtype": "Data",
+   "label": "Twilio Service ID"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-01-18 09:51:29.553822",
+ "modified_by": "Administrator",
+ "module": "Al-Ummah",
+ "name": "Twilio Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
