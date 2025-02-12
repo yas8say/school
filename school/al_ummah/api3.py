@@ -12,8 +12,39 @@ from frappe.utils.file_manager import save_file
 from frappe.utils.response import build_response
 from frappe.auth import get_logged_user
 
+#qdsr itqf nmqx zmni
 
+@frappe.whitelist(allow_guest=True)
+def create_email_account(email_id, password, append_to=None):
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
+    email_dict = {
+        "email_id": email_id,
+        "service": "GMail",
+        "password": password,
+        "enable_outgoing": 1,
+        "default_outgoing": 1,
+        "enable_incoming": 0,
+        "append_to": append_to,
+        "use_tls": 1, 
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": "587",
+        "use_imap": 0,
+    }
 
+    email_account = frappe.new_doc("Email Account")
+    email_account.update(email_dict)
+    email_account.save(ignore_permissions=True)
+ 
+ 
+@frappe.whitelist()
+def set_instructor_token(token):
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
+    token_doc = frappe.get_single("Instructor Token")
+    token_doc.token = token
+    token_doc.save()
+    
 @frappe.whitelist()
 def get_classes():
     classes = frappe.get_all("Program")
@@ -28,6 +59,8 @@ def get_divisions(values):
 
 @frappe.whitelist()
 def get_previous_data():
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
     previous_docs = frappe.get_all("Previous Class Structure", fields=["json_data"])
     
     # Print the entire result for debugging
@@ -48,22 +81,23 @@ def save_previous_class_structure(values):
         
 @frappe.whitelist()
 def quick_setup(values):
-    print(values)
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
     try:    
         # Extract academicYear, term, and institutionName from values
         academic_year = values.get("academicYear")
         terms = values.get("terms", [])
-        institution_name = values.get("institutionName")
+        # institution_name = values.get("institutionName")
         logo = values.get("logo")
         academic_year_start = values.get("academicYearStart")
         academic_year_end = values.get("academicYearEnd")
         current_term = values.get("selectedTerm")
         
-        if not academic_year or not terms or not institution_name:
+        if not academic_year or not terms:
             raise frappe.ValidationError("Missing required fields: academicYear, term, or institutionName.")
         
-        if institution_name or logo:
-            set_institution_details(institution_name, logo)
+        # if institution_name or logo:
+        #     set_institution_details(institution_name, logo)
         
         # Set academic details
         set_academic_details(
@@ -83,6 +117,8 @@ def quick_setup(values):
 
 @frappe.whitelist()
 def create_program_and_groups_with_courses(values):
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
     try:
         classes = values.get("classes")
         academic_year_name = values.get("academicYear")
@@ -158,6 +194,8 @@ def create_program_and_groups_with_courses(values):
 
 @frappe.whitelist()
 def set_academic_details(academic_year_name, year_start_date, year_end_date, terms, selected_term):
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
     try:
         # Create Academic Year Document
         year_doc = frappe.new_doc("Academic Year")
@@ -197,8 +235,10 @@ def set_academic_details(academic_year_name, year_start_date, year_end_date, ter
         frappe.log_error(f"Error in setting academic details: {str(e)}", "Set Academic Details Error")
         return {"status": "failed", "message": f"Error in setting academic details: {str(e)}"}
 
-
+@frappe.whitelist()
 def set_institution_details(name, image=None):
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
     """
     Set the institution name and logo in Website Settings.
 
@@ -242,26 +282,6 @@ def set_institution_details(name, image=None):
 import random
 import string
 
-# @frappe.whitelist()
-# def bulk_enroll_students(className, divisionName, students):
-#     if not className or not divisionName or not students:
-#         frappe.throw("Class, Division, and Students data are required.")
-    
-#     edu_settings = frappe.get_single("Education Settings")
-#     year = edu_settings.current_academic_year
-#     term = edu_settings.current_academic_term
-
-#     for student in students:
-#         roll_no = student.get("Roll No")
-
-#         if roll_no is None or not isinstance(roll_no, int):
-#             continue
-#         try:
-#             enroll_student(student, className, divisionName, year, term)
-#         except Exception as e:
-#             frappe.log_error(f"Error enrolling student {student['Name']}: {str(e)}", "Student Enrollment Error")
-
-#     return {"status": "success", "message": "Students enrolled successfully!"}
 @frappe.whitelist()
 def bulk_enroll_students(className, divisionName, students):
     if "Administrator" not in frappe.get_roles(frappe.session.user):
@@ -300,7 +320,7 @@ def bulk_enroll_students(className, divisionName, students):
                 enroll_student(filler_student, className, divisionName, year, term)
                 current_roll_no += 1
             except Exception as e:
-                frappe.log_error(
+                print(
                     f"Error enrolling filler student with Roll No {current_roll_no}: {str(e)}",
                     "Filler Enrollment Error"
                 )
@@ -310,21 +330,36 @@ def bulk_enroll_students(className, divisionName, students):
             enroll_student(student, className, divisionName, year, term)
             current_roll_no = roll_no + 1
         except Exception as e:
-            frappe.log_error(
+            print(
                 f"Error enrolling student {student['Name']}: {str(e)}",
                 "Student Enrollment Error"
             )
 
     return {"status": "success", "message": "Students enrolled successfully!"}
 
+import re
+import random
 
+@frappe.whitelist()
 def generate_unique_email(name):
     while True:
-        email = f"{name.replace(' ', '.').lower()}@codedaddy.io"
+        # Convert spaces to dots and ensure no consecutive dots
+        email_name = name.strip().replace(' ', '.').lower()
+        email_name = re.sub(r'\.+', '.', email_name)  # Replace multiple dots with a single dot
+        email_name = email_name.strip('.')  # Remove leading or trailing dots
+        
+        email = f"{email_name}@codedaddy.io"
+        
         if not frappe.db.exists("User", {"email": email}):
             return email
-        # If exists, append a random number to the name and retry
-        email = f"{name.replace(' ', '.').lower()}.{random.randint(1000, 9999)}@example.com"
+        
+        # If email exists, append a random number for uniqueness
+        email = f"{email_name}.{random.randint(1000, 9999)}@codedaddy.io"
+        email = email.strip('.')  # Ensure no trailing dot before returning
+        
+        if not frappe.db.exists("User", {"email": email}):
+            return email\
+
 
 
 def generate_unique_phone():
