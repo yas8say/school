@@ -12,50 +12,327 @@ from frappe.model.document import Document
 from frappe.utils.file_manager import save_file
 
 import frappe
-from twilio.rest import Client
 
 
-def get_twilio_client():
-	twilio_settings = frappe.get_doc("Twilio Settings")
-	account_sid = twilio_settings.twilio_account_sid
-	auth_token = twilio_settings.get_password("twilio_auth_token")
+import frappe
+import requests
 
-	return Client(account_sid, auth_token)
+# MSG91 API Credentials
+# MSG91_AUTH_KEY = frappe.conf.get("msg91_auth_key")
+# MSG91_SENDER_ID = frappe.conf.get("msg91_sender_id")
+# MSG91_OTP_TEMPLATE_ID = frappe.conf.get("msg91_otp_template_id")
 
 
-def send_text_message(message_body: str, to: str, from_: str = None):
-	if not from_:
-		from_ = frappe.db.get_single_value("Twilio Settings", "twilio_phone_number")
+# @frappe.whitelist(allow_guest=True)
+# def send_otp(phone: str):
+#     """
+#     Sends OTP via MSG91 to the given phone number.
+#     """
 
-	client = get_twilio_client()
-	return client.messages.create(from_=from_, body=message_body, to=to)
+#     # Check if the user already exists
+#     # user_by_email = frappe.db.get("User", {"email": phone})
+#     user_by_phone = frappe.db.get("User", {"mobile_no": phone})
+
+#     # if user_by_email and user_by_email.enabled:
+#     #     return {"success": False, "message": "User already registered with this email."}
+#     if user_by_phone and user_by_phone.enabled:
+#         return {"success": False, "message": "User already registered with this phone."}
+
+#     # MSG91 OTP API URL
+#     url = "https://control.msg91.com/api/v5/otp"
+
+#     payload = {
+#         "authkey": "440500AhNX5vWp2a67a1d344P1",
+#         "mobile": phone,
+#         "template_id": "67b44535d6fc0513410877e4",
+#         "otp_length": 4,
+#         "otp_expiry": 1,  # Optional, set the expiry time for the OTP
+#         "realTimeResponse": 1  # Optional, to get real-time responses
+#     }
+
+#     headers = {"Content-Type": "application/json"}
+
+#     response = requests.post(url, json=payload, headers=headers)
+#     data = response.json()
+
+#     if data.get("type") == "success":
+#         return {"success": True, "otp_sent": True}
+#     else:
+#         return {"success": False, "message": data.get("message", "OTP sending failed.")}
+
+
+
+# def verify_otp(phone: str, otp: str):
+#     """
+#     Verifies the OTP using MSG91 API.
+#     """
+#     url = "https://control.msg91.com/api/v5/otp/verify"
+
+#     payload = {
+#         "authkey": "440500AhNX5vWp2a67a1d344P1",
+#         "mobile": phone,
+#         "otp": otp
+#     }
+
+#     headers = {"Content-Type": "application/json"}
+
+#     response = requests.post(url, json=payload, headers=headers)
+#     data = response.json()
+
+#     if data.get("type") == "success":
+#         return True
+#     else:
+#         frappe.throw("Incorrect OTP!")
+
+import frappe
+import requests
+from frappe.auth import LoginManager
+
+MSG91_AUTH_KEY = "440500AhNX5vWp2a67a1d344P1"
+MSG91_OTP_TEMPLATE_ID = "67b44535d6fc0513410877e4"
 
 @frappe.whitelist(allow_guest=True)
-def verify_otp_and_register(email: str, fullName: str, phone: str, otp: str, password: str, role: str, addedDivisions):
-    print(fullName, role, addedDivisions, otp)
-    if role == "teacher":
-        role = "Instructor"
-    if verify_otp(phone, otp):
-        create_user_and_instructor(email, fullName, phone, password, role, addedDivisions)
-        return True
-    return False
+def send_otp(phone: str):
+    """
+    Sends OTP via MSG91 to the given phone number if the user exists in Frappe's User doctype.
+    """
+    # Check if user exists in User doctype with the given phone number
+    user_exists = frappe.db.exists("User", {"mobile_no": phone})
 
-def verify_otp(phone: str, otp: str):
-	twilio_phone = add_prefix_to_phone(phone)
-	if frappe.conf.developer_mode:
-		if frappe.cache.get_value("twilio_fake_otp") == otp:
-			return True
-		else:
-			return False
-   
+    if not user_exists:
+        return {"success": False, "message": "Phone number not registered!"}
 
-	client = get_twilio_client()
-	service_id = frappe.db.get_single_value("Twilio Settings", "twilio_service_id")
+    # MSG91 OTP API URL
+    url = "https://control.msg91.com/api/v5/otp"
 
-	verification_check = client.verify.v2.services(service_id).verification_checks.create(to=twilio_phone, code=otp)
-	if verification_check.status != "approved":
-		frappe.throw("Incorrect OTP!")
-	return True
+    payload = {
+        "authkey": MSG91_AUTH_KEY,
+        "mobile": phone,
+        "template_id": MSG91_OTP_TEMPLATE_ID,
+        "otp_length": 4,  # Set OTP length
+        "otp_expiry": 1,   # Set OTP expiry time (optional)
+        "realTimeResponse": 1  # Get real-time response (optional)
+    }
+
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+
+        if data.get("type") == "success":
+            return {"success": True, "otp_sent": True}
+        else:
+            return {"success": False, "message": data.get("message", "OTP sending failed.")}
+    
+    except requests.exceptions.RequestException as e:
+        frappe.log_error(f"MSG91 OTP Sending Error: {str(e)}")
+        return {"success": False, "message": "Server Error. Please try again."}
+
+# @frappe.whitelist(allow_guest=True)
+# def verify_otp_and_create_session(phone: str, otp: str, role: str):
+#     """
+#     Verifies OTP using MSG91 API, creates a session, and returns user details.
+#     """
+#     if not verify_otp(phone, otp):
+#         frappe.throw("Incorrect OTP!")
+
+#     user = get_user_name_with_phone(phone)
+
+#     # Set session manually
+#     frappe.local.login_manager = LoginManager()
+#     frappe.local.login_manager.user = user
+#     frappe.session.user = user
+
+#     # Fetch user details and roles
+#     return get_user_details(user, role)
+from frappe.auth import LoginManager
+
+import frappe
+
+@frappe.whitelist(allow_guest=True)  # Use allow_guest=True if users without login need access
+def verify_otp_and_get_api_key(phone: str, otp: str):
+    """
+    Verifies OTP and returns both API key and API secret for authentication.
+    """
+    if not verify_otp(phone, otp):
+        frappe.throw("Incorrect OTP!")
+
+    user = get_user_name_with_phone(phone)
+
+    # Get user document
+    user_doc = frappe.get_doc("User", user)
+
+    # Generate API Key if it doesn't exist
+    api_key = user_doc.api_key if user_doc.api_key else frappe.generate_hash(length=15)
+    frappe.db.set_value("User", user, "api_key", api_key)
+
+    try:
+        api_secret = frappe.utils.password.get_decrypted_password("User", user, "api_secret")
+    except frappe.exceptions.AuthenticationError:
+        api_secret = frappe.generate_hash(length=30)
+        frappe.utils.password.set_encrypted_password("User", user, api_secret, "api_secret")  # FIXED
+        frappe.db.commit()
+
+    return {
+        "api_key": api_key,
+        "api_secret": api_secret
+    }
+
+
+
+def verify_otp(phone: str, otp: str) -> bool:
+    """
+    Verifies OTP using MSG91 API.
+    """
+    url = "https://control.msg91.com/api/v5/otp/verify"
+
+    payload = {
+        "authkey": MSG91_AUTH_KEY,
+        "mobile": phone,
+        "otp": otp
+    }
+
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+
+        if data.get("type") == "success":
+            return True
+        else:
+            return False
+    
+    except requests.exceptions.RequestException as e:
+        frappe.log_error(f"MSG91 OTP Verification Error: {str(e)}")
+        return False
+
+
+def get_user_name_with_phone(phone: str):
+    """
+    Retrieves the user associated with the given phone number.
+    """
+    user_exists = frappe.db.exists("User", {"mobile_no": phone})
+
+    if not user_exists:
+        frappe.throw("Phone number not registered!")
+
+    return frappe.db.get_value("User", {"mobile_no": phone}, "name")
+
+import frappe
+import requests
+
+GOOGLE_OAUTH2_URL = "https://oauth2.googleapis.com/tokeninfo"
+
+@frappe.whitelist(allow_guest=True)
+def verify_google_token(id_token: str):
+    """
+    Verifies Google ID token and returns API key & secret if the user exists in Frappe.
+    """
+    try:
+        # Verify the Google ID token
+        response = requests.get(f"{GOOGLE_OAUTH2_URL}?id_token={id_token}")
+        token_info = response.json()
+
+        if "email" not in token_info:
+            return {"success": False, "error": "Invalid token"}
+
+        email = token_info["email"]
+
+        # Check if user exists in Frappe
+        if not frappe.db.exists("User", email):
+            return {"success": False, "error": "User not found"}
+
+        user_doc = frappe.get_doc("User", email)
+
+        # Generate API Key if it doesn't exist
+        api_key = user_doc.api_key if user_doc.api_key else frappe.generate_hash(length=15)
+        frappe.db.set_value("User", email, "api_key", api_key)
+        frappe.db.commit()
+
+        try:
+            api_secret = frappe.utils.password.get_decrypted_password("User", email, "api_secret")
+        except frappe.exceptions.AuthenticationError:
+            api_secret = frappe.generate_hash(length=30)
+            frappe.utils.password.set_encrypted_password("User", email, api_secret, "api_secret")  # FIX HERE
+            frappe.db.commit()
+
+        return {
+            "api_key": api_key,
+            "api_secret": api_secret
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Google Auth Error: {str(e)}", "Google Login")
+        return {"success": False, "error": "Authentication failed"}
+
+
+# @frappe.whitelist(allow_guest=True)
+# def verify_otp_and_login(phone: str, otp: str):
+#     """
+#     Verifies OTP using MSG91 API and logs in the user if OTP is valid.
+#     """
+#     if not verify_otp(phone, otp):
+#         frappe.throw("Incorrect OTP!")
+
+#     print(login_user_with_phone(phone))
+
+#     return {"success": True, "message": "Logged in successfully!"}
+
+
+# def verify_otp(phone: str, otp: str) -> bool:
+#     """
+#     Verifies OTP using MSG91 API.
+#     """
+#     url = "https://control.msg91.com/api/v5/otp/verify"
+
+#     payload = {
+#         "authkey": MSG91_AUTH_KEY,
+#         "mobile": phone,
+#         "otp": otp
+#     }
+
+#     headers = {"Content-Type": "application/json"}
+
+#     try:
+#         response = requests.post(url, json=payload, headers=headers)
+#         data = response.json()
+
+#         if data.get("type") == "success":
+#             return True
+#         else:
+#             return False
+    
+#     except requests.exceptions.RequestException as e:
+#         frappe.log_error(f"MSG91 OTP Verification Error: {str(e)}")
+#         return False
+
+
+# def login_user_with_phone(phone: str):
+#     """
+#     Logs in the user with the given phone number by creating a session.
+#     """
+#     user = get_user_name_with_phone(phone)
+
+#     login_manager = LoginManager()
+#     login_manager.login_as(user)
+
+
+# def get_user_name_with_phone(phone: str):
+#     """
+#     Retrieves the user associated with the given phone number.
+#     """
+#     user_exists = frappe.db.exists("User", {"mobile_no": phone})
+
+#     if not user_exists:
+#         frappe.throw("Phone number not registered!")
+
+#     user = frappe.db.get_value("User", {"mobile_no": phone}, "name")
+#     print(user)
+#     return user
+
+
   
 # def create_user_and_instructor(email, first_name, phone, password, role, addedDivisions):
 #     try:
@@ -192,14 +469,14 @@ def send_notification_to_admin(instructor_name, division_name):
 
 
     
-def get_user_name_with_phone(email: str):
-	# find the user to which this phone number belongs to
-	user_exists = frappe.db.exists("User", {"email": email})
+# def get_user_name_with_phone(email: str):
+# 	# find the user to which this phone number belongs to
+# 	user_exists = frappe.db.exists("User", {"email": email})
 
-	if not user_exists:
-		frappe.throw("Email address not registered!")
+# 	if not user_exists:
+# 		frappe.throw("Email address not registered!")
 
-	return frappe.db.get_value("User", {"email": email}, "name")
+# 	return frappe.db.get_value("User", {"email": email}, "name")
 
 def add_prefix_to_phone(phone_number):
     phone_number = phone_number.strip()  # Remove leading/trailing whitespace
@@ -208,44 +485,7 @@ def add_prefix_to_phone(phone_number):
     return phone_number
 
 
-@frappe.whitelist(allow_guest=True)
-def send_otp(phone: str, email: str, token: str, role: str):
-    actual_token = None
-    classes = None
-    
-    if role == "teacher":
-        token_doc = frappe.get_single("Instructor Token")
-        actual_token = token_doc.token
-        classes = frappe.get_all("Program", fields=["name"])
-        
-    if role == "parent":
-        return {"success": False, "message": "Currently, we're not allowing parent registration."}
-    if token != actual_token:
-        return {"success": False, "message": "You're not allowed to use this application"}
-    
-    # Check for user by email or phone
-    user_by_email = frappe.db.get("User", {"email": email})
-    user_by_phone = frappe.db.get("User", {"mobile_no": phone})
 
-    # If either user exists and is enabled, return False (indicating already registered)
-    if user_by_email and user_by_email.enabled:
-        return {"success": False, "message": "User already registered with this email."}
-    if user_by_phone and user_by_phone.enabled:
-        return {"success": False, "message": "User already registered with this phone."}    
-
-    # Handle developer mode fake OTP
-    if frappe.conf.developer_mode:
-        frappe.cache.set_value("twilio_fake_otp", "123456")
-        print(role, classes)
-        return {"success": True, "otp_sent": True, "classes": classes}
-
-    # Send real OTP using Twilio
-    client = get_twilio_client()
-    service_id = frappe.db.get_single_value("Twilio Settings", "twilio_service_id")
-    twilio_phone = add_prefix_to_phone(phone)
-    client.verify.v2.services(service_id).verifications.create(to=twilio_phone, channel="sms")
-
-    return {"success": True, "otp_sent": True, "classes": classes}
 
 @frappe.whitelist(allow_guest=True)
 def get_divisions(program):
@@ -545,13 +785,14 @@ def get_user_details(username, role):
 def get_instructor_app_data(teacherID):
     """Fetch all required static data in one API call."""
     response = {}
-    user_doc = frappe.get_doc("User", {"email": teacherID})
-    instructor_doc = frappe.get_doc("Instructor", {"instructor_name": user_doc.full_name})
+    # user_doc = frappe.get_doc("User", {"email": teacherID})
+    emp_doc = frappe.get_doc("Employee", {"user_id": teacherID})
+    instructor_doc = frappe.get_doc("Instructor", {"employee": emp_doc.employee})
 
     student_groups = frappe.db.get_all(
 		"Student Group Instructor",
 		pluck="parent",
-		filters={"instructor": user_doc.full_name},
+		filters={"instructor": instructor_doc.instructor_name},
 	)
 
     profile = instructor_doc.image
@@ -737,7 +978,15 @@ def get_student_guardians(student):
         filters={"parent": student}
     )
     return guardians
+import requests
+import frappe
 
+MSG91_AUTH_KEY = "440500AhNX5vWp2a67a1d344P1"
+MSG91_TEMPLATE_ID = "67a9cc85d6fc0568b5678ec2"
+MSG91_SENDER_ID = "CDTEDU"  # Ensure this is approved in MSG91
+MSG91_ROUTE = "4"  # Transactional route
+
+@frappe.whitelist()
 def send_notification_to_app(student_list):
     for student in student_list:
         guardians = get_student_guardians(student)
@@ -749,7 +998,8 @@ def send_notification_to_app(student_list):
         for guardian in guardians:
             guardian_doc = frappe.get_doc("Guardian", guardian.get("guardian"))
             guardian_email = guardian_doc.email_address  # Ensure this field exists
-
+            guardian_phone = guardian_doc.mobile_no  # Ensure this field exists
+            
             if guardian_email:
                 # Check if a device record exists for the guardian
                 existing_device = frappe.get_all(
@@ -776,11 +1026,91 @@ def send_notification_to_app(student_list):
                         )
                         print(f"Email sent to {guardian_email}")
 
+                        # Send SMS notification to guardian
+                        if guardian_phone:
+                            send_sms_via_msg91(guardian_phone, student_name)
+                            print(f"SMS sent to {guardian_phone}")
+
                     except Exception as e:
                         print(f"Error sending notifications to {guardian_email}: {e}")
                         continue  # Continue processing the next guardian
 
     return {"status": "success", "message": "Notifications sent to guardians of absent students."}
+
+def send_sms_via_msg91(mobile, student_name):
+    """
+    Sends an SMS via MSG91 API.
+    """
+    url = "https://control.msg91.com/api/v5/flow/"
+    headers = {
+        "authkey": MSG91_AUTH_KEY,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "flow_id": MSG91_TEMPLATE_ID,  # Use 'flow_id' instead of 'template_id' for MSG91 Flow API
+        "sender": MSG91_SENDER_ID,
+        "short_url": "1",
+        "recipients": [
+            {
+                "mobiles": mobile,
+                "VAR1": student_name  # Matches ##var1## in your MSG91 template
+            }
+        ]
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response_data = response.json()
+        if response.status_code == 200 and response_data.get("type") == "success":
+            print(f"SMS successfully sent to {mobile}")
+        else:
+            print(f"Failed to send SMS to {mobile}: {response_data}")
+    except Exception as e:
+        print(f"Error sending SMS to {mobile}: {e}")
+
+# def send_notification_to_app(student_list):
+#     for student in student_list:
+#         guardians = get_student_guardians(student)
+        
+#         # Get student details
+#         student_doc = frappe.get_doc("Student", student)
+#         student_name = student_doc.student_name
+
+#         for guardian in guardians:
+#             guardian_doc = frappe.get_doc("Guardian", guardian.get("guardian"))
+#             guardian_email = guardian_doc.email_address  # Ensure this field exists
+
+#             if guardian_email:
+#                 # Check if a device record exists for the guardian
+#                 existing_device = frappe.get_all(
+#                     "User Device", filters={"user": guardian_email}, fields=["device_id"]
+#                 )
+
+#                 if existing_device:
+#                     device_id = existing_device[0].get("device_id")
+#                     msg = _(f"Dear Parent, your child {student_name} is marked absent today. Please check the attendance for further details.")
+#                     title = _("Al-Ummah Girls High School")
+
+#                     try:
+#                         if device_id:
+#                             # Send push notification to guardian
+#                             from expo_push_notifier.expo_push_notifier.api import send_push_message
+#                             send_push_message(device_id, title, msg)
+#                             print(f"Push notification sent to {guardian_email} ({device_id})")
+
+#                         # Send email notification to guardian
+#                         frappe.sendmail(
+#                             recipients=[guardian_email],
+#                             subject="Your child was marked absent",
+#                             message=msg
+#                         )
+#                         print(f"Email sent to {guardian_email}")
+
+#                     except Exception as e:
+#                         print(f"Error sending notifications to {guardian_email}: {e}")
+#                         continue  # Continue processing the next guardian
+
+#     return {"status": "success", "message": "Notifications sent to guardians of absent students."}
 
 
 
