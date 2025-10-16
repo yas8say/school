@@ -1,0 +1,24 @@
+{
+  "name": "school",
+  "version": "1.0.0",
+  "description": "School",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+
+    "postinstall": "yarn setup:install && yarn instructor:install",
+    "dev": "yarn setup:dev & yarn instructor:dev",
+    "build": "yarn setup:build && yarn instructor:build",
+
+    "setup:install": "cd setup && yarn install",
+    "setup:dev": "cd setup && yarn dev",
+    "setup:build": "cd setup && yarn build",
+
+    "instructor:install": "cd instructor-portal && yarn install",
+    "instructor:dev": "cd instructor-portal && yarn dev",
+    "instructor:build": "cd instructor-portal && yarn build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

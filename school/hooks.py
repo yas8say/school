@@ -132,6 +132,8 @@ app_license = "mit"
 # override_doctype_class = {
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
+override_response_cookies = "school.al_ummah.api3.override_response_cookies"
+
 
 # Document Events
 # ---------------
@@ -242,3 +244,5 @@ app_license = "mit"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+
+website_route_rules = [{'from_route': '/instructor-portal/<path:app_path>', 'to_route': 'instructor-portal'}, {'from_route': '/frontend/<path:app_path>', 'to_route': 'frontend'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup1/<path:app_path>', 'to_route': 'setup1'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/frontend/<path:app_path>', 'to_route': 'frontend'}, {'from_route': '/setup-app/<path:app_path>', 'to_route': 'setup-app'},]
