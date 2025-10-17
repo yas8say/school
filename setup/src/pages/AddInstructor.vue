@@ -1,5 +1,59 @@
 <template>
   <div class="enrollment-container">
+    <!-- Loading Screen -->
+    <div v-if="isLoading || enrollTeacherResource.loading" class="loading-overlay">
+      <div class="loading-modal">
+        <div class="loading-spinner"></div>
+        <h3 class="loading-title">Enrolling Teacher...</h3>
+        <p class="loading-description">Please wait while we process the teacher information.</p>
+      </div>
+    </div>
+
+    <!-- Success/Failure Message -->
+    <div v-if="showResultMessage" class="modal-overlay">
+      <div class="result-modal">
+        <div v-if="submitSuccess" class="success-icon">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div v-else class="error-icon">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <h3 class="result-title">
+          {{ submitSuccess ? 'Teacher Enrolled Successfully!' : 'Enrollment Failed' }}
+        </h3>
+        <p class="result-description">
+          {{ submitSuccess ? successMessage : errorMessage }}
+        </p>
+        <div class="modal-actions">
+          <button
+            v-if="submitSuccess"
+            @click="resetAndClose"
+            class="success-button"
+          >
+            Add Another Teacher
+          </button>
+          <button
+            v-else
+            @click="showResultMessage = false"
+            class="primary-button"
+          >
+            Try Again
+          </button>
+          <button
+            v-if="submitSuccess"
+            @click="showResultMessage = false"
+            class="secondary-button"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="header">
       <h1 class="title">Teacher Enrollment</h1>
       <p class="subtitle">Add new teacher to the system</p>
@@ -179,7 +233,7 @@
         <button 
           class="enroll-button" 
           @click="validateAndSubmit"
-          :disabled="isLoading || enrollTeacherResource.loading"
+          :disabled="isLoading || enrollTeacherResource.loading || showResultMessage"
         >
           <span v-if="isLoading || enrollTeacherResource.loading" class="button-content">
             <span class="spinner"></span> Processing...
@@ -195,13 +249,14 @@
         <button 
           class="reset-button" 
           @click="resetForm"
-          :disabled="isLoading || enrollTeacherResource.loading"
+          :disabled="isLoading || enrollTeacherResource.loading || showResultMessage"
         >
           Reset Form
         </button>
       </div>
 
-      <div v-if="message" :class="['message', message.type]">
+      <!-- Inline message (for non-modal notifications) -->
+      <div v-if="message && !showResultMessage" :class="['message', message.type]">
         {{ message.text }}
       </div>
     </div>
@@ -242,6 +297,12 @@ export default {
     const isLoading = ref(false);
     const message = ref(null);
     const errors = reactive({});
+
+    // New state for modal management
+    const showResultMessage = ref(false);
+    const submitSuccess = ref(false);
+    const errorMessage = ref('');
+    const successMessage = ref('');
 
     // API Resources
     const classesResource = createResource({
@@ -297,23 +358,31 @@ export default {
       },
       onSuccess: (response) => {
         isLoading.value = false;
-        // Display the raw API response
+        submitSuccess.value = true;
+        
+        // Create personalized success message
         if (response && response.message) {
-          showMessage(response.message, 'success');
+          successMessage.value = response.message;
         } else {
-          showMessage('Teacher enrollment completed', 'success');
+          successMessage.value = `Teacher ${teacherData.firstName} ${teacherData.lastName} has been successfully enrolled${teacherData.designation ? ` as ${teacherData.designation}` : ''}.`;
         }
+        
+        showResultMessage.value = true;
       },
       onError: (err) => {
         isLoading.value = false;
-        // Display the raw API error response
+        submitSuccess.value = false;
+        
+        // Create detailed error message
         if (err.messages && err.messages.length > 0) {
-          showMessage(err.messages[0], 'error');
+          errorMessage.value = err.messages[0];
         } else if (err.message) {
-          showMessage(err.message, 'error');
+          errorMessage.value = err.message;
         } else {
-          showMessage('An error occurred', 'error');
+          errorMessage.value = 'An unexpected error occurred while enrolling the teacher. Please try again.';
         }
+        
+        showResultMessage.value = true;
       }
     });
 
@@ -448,6 +517,12 @@ export default {
       showMessage(null);
     }
 
+    function resetAndClose() {
+      resetForm();
+      showResultMessage.value = false;
+      submitSuccess.value = false;
+    }
+
     function showMessage(text, type = "info") {
       message.value = text ? { text, type } : null;
       if (text && type !== "error") {
@@ -465,9 +540,14 @@ export default {
       classesResource,
       divisionsResource,
       enrollTeacherResource,
+      showResultMessage,
+      submitSuccess,
+      errorMessage,
+      successMessage,
       onClassChange,
       validateAndSubmit,
-      resetForm
+      resetForm,
+      resetAndClose
     };
   }
 };

@@ -1,5 +1,59 @@
 <template>
   <div class="enrollment-form">
+    <!-- Loading Screen -->
+    <div v-if="isSubmitting || enrollStudentResource.loading" class="loading-overlay">
+      <div class="loading-modal">
+        <div class="loading-spinner"></div>
+        <h3 class="loading-title">Enrolling Student...</h3>
+        <p class="loading-description">Please wait while we process the student information.</p>
+      </div>
+    </div>
+
+    <!-- Success/Failure Message -->
+    <div v-if="showResultMessage" class="modal-overlay">
+      <div class="result-modal">
+        <div v-if="submitSuccess" class="success-icon">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div v-else class="error-icon">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <h3 class="result-title">
+          {{ submitSuccess ? 'Student Enrolled Successfully!' : 'Enrollment Failed' }}
+        </h3>
+        <p class="result-description">
+          {{ submitSuccess ? successMessage : errorMessage }}
+        </p>
+        <div class="modal-actions">
+          <button
+            v-if="submitSuccess"
+            @click="resetAndClose"
+            class="success-button"
+          >
+            Add Another Student
+          </button>
+          <button
+            v-else
+            @click="showResultMessage = false"
+            class="primary-button"
+          >
+            Try Again
+          </button>
+          <button
+            v-if="submitSuccess"
+            @click="showResultMessage = false"
+            class="secondary-button"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="header">
       <h1 class="title">Student Enrollment</h1>
       <p class="subtitle">Add new student to the system</p>
@@ -245,8 +299,6 @@
               rows="3"
             ></textarea>
           </div>
-
-
         </div>
       </div>
 
@@ -255,7 +307,7 @@
         <button 
           class="enroll-button"
           @click="validateAndSubmit"
-          :disabled="isSubmitting || enrollStudentResource.loading"
+          :disabled="isSubmitting || enrollStudentResource.loading || showResultMessage"
         >
           <span v-if="isSubmitting || enrollStudentResource.loading" class="button-content">
             <span class="spinner"></span> Processing...
@@ -271,13 +323,14 @@
         <button 
           class="reset-button" 
           @click="resetForm"
-          :disabled="isSubmitting || enrollStudentResource.loading"
+          :disabled="isSubmitting || enrollStudentResource.loading || showResultMessage"
         >
           Reset Form
         </button>
       </div>
 
-      <div v-if="message" :class="['message', message.type]">
+      <!-- Inline message (for non-modal notifications) -->
+      <div v-if="message && !showResultMessage" :class="['message', message.type]">
         {{ message.text }}
       </div>
     </div>
@@ -329,6 +382,12 @@ export default {
     const isSubmitting = ref(false);
     const message = ref(null);
     const errors = reactive({});
+
+    // New state for modal management
+    const showResultMessage = ref(false);
+    const submitSuccess = ref(false);
+    const errorMessage = ref('');
+    const successMessage = ref('');
 
     // API Resources
     const academicYearsResource = createResource({
@@ -396,12 +455,15 @@ export default {
       },
       onSuccess: (response) => {
         isSubmitting.value = false;
-        showMessage("✅ Student enrolled successfully!", "success");
-        // resetForm();
+        submitSuccess.value = true;
+        successMessage.value = `Student ${formData.student_data['First Name']} ${formData.student_data['Last Name']} has been successfully enrolled in ${formData.className} - ${formData.divisionName} for the ${formData.academicYear} academic year.`;
+        showResultMessage.value = true;
       },
       onError: (err) => {
         isSubmitting.value = false;
-        showMessage(err.messages?.[0] || 'Unexpected error occurred', 'error');
+        submitSuccess.value = false;
+        errorMessage.value = err.messages?.[0] || 'An unexpected error occurred while enrolling the student. Please try again.';
+        showResultMessage.value = true;
       }
     });
 
@@ -464,10 +526,6 @@ export default {
         errors.lastName = 'Last name is required';
         isValid = false;
       }
-      // if (!formData.student_data['Student Date of Birth']) {
-      //   errors.studentDob = 'Student date of birth is required';
-      //   isValid = false;
-      // }
       if (!formData.student_data['GR Number'].trim()) {
         errors.grNumber = 'GR number is required';
         isValid = false;
@@ -563,6 +621,12 @@ export default {
       message.value = null;
     }
 
+    function resetAndClose() {
+      resetForm();
+      showResultMessage.value = false;
+      submitSuccess.value = false;
+    }
+
     function showMessage(text, type = 'info') {
       message.value = { text, type };
       if (type !== 'error') {
@@ -583,10 +647,15 @@ export default {
       classesResource,
       divisionsResource,
       enrollStudentResource,
+      showResultMessage,
+      submitSuccess,
+      errorMessage,
+      successMessage,
       onYearChange,
       onClassChange,
       validateAndSubmit,
-      resetForm
+      resetForm,
+      resetAndClose
     };
   }
 };
