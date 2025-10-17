@@ -27,7 +27,7 @@
         <button
           @click="nextStep"
           class="ml-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          :disabled="isSubmitting"
+          :disabled="isSubmitting || quickSetupResource.loading"
         >
           {{ currentStep === steps.length - 1 ? (isSubmitting ? 'Submitting...' : 'Submit') : 'Next' }}
         </button>
@@ -81,13 +81,13 @@
 </template>
 
 <script>
+import { createResource } from 'frappe-ui';
+import { reactive, ref, onMounted } from 'vue';
 import EmailAccountSetup from './EmailAccountSetup.vue';
 import AcademicYearTerms from './AcademicYearTerms.vue';
 import UsePreviousData from './UsePreviousData.vue';
 import ProgramSelection from './ProgramSelection.vue';
 import SubjectsDivisions from './SubjectsDivisions.vue';
-
-import { previousData, setEmailAcc, quickSetup } from '@/utils/apiUtils';
 
 export default {
   components: {
@@ -97,58 +97,94 @@ export default {
     ProgramSelection,
     SubjectsDivisions
   },
-  data() {
-    return {
-      currentStep: 0,
+  setup() {
+    // Reactive state
+    const currentStep = ref(0);
+    const previousDataList = ref([]);
+    const isSubmitting = ref(false);
+    const showResultMessage = ref(false);
+    const submitSuccess = ref(false);
+    const errorMessage = ref('');
+
+    const formValues = reactive({
+      email: '',
+      googleAppPassword: '',
+      academicYear: '',
+      academicYearStart: '',
+      academicYearEnd: '',
+      numberOfTerms: '',
+      terms: [],
       selectedTerm: '',
-      datePicker: {
-        showFrom: false,
-        showTo: false,
-        currentField: ''
+      classes: [],
+      subjects: [],
+      divisions: [],
+      commonSubjects: [],
+      commonDivisions: [],
+      dontCreateClasses: false
+    });
+
+    const steps = ref([
+      { title: 'Email Account Setup (Optional)', component: 'EmailAccountSetup' },
+      { title: 'Academic Year & Terms', component: 'AcademicYearTerms' },
+      { title: 'Use Previous Data', component: 'UsePreviousData' },
+      { title: 'Select Institution Type & Classes', component: 'ProgramSelection' },
+      { title: 'Subjects and Divisions', component: 'SubjectsDivisions' }
+    ]);
+
+    // API Resources
+    const previousDataResource = createResource({
+      url: 'school.al_ummah.api3.get_previous_data',
+      params: { values: {} },
+      onSuccess: (data) => {
+        previousDataList.value = Array.isArray(data) ? data.map(item => ({
+          ...item,
+          academicYear: item.json_data ? JSON.parse(item.json_data).academicYear : '',
+        })) : [];
       },
-      previousDataList: [],
-      selectedPreviousData: null,
-      isSubmitting: false,
-      showResultMessage: false,
-      submitSuccess: false,
-      errorMessage: '',
-      formValues: {
-        email: '',
-        googleAppPassword: '',
-        academicYear: '',
-        academicYearStart: '',
-        academicYearEnd: '',
-        numberOfTerms: '',
-        terms: [],
-        selectedTerm: '',
-        classes: [],
-        subjects: [],
-        divisions: [],
-        commonSubjects: [],
-        commonDivisions: [],
-        dontCreateClasses: false
+      onError: (err) => {
+        console.error('Error fetching previous data:', err);
+        previousDataList.value = [];
+      }
+    });
+
+    const setEmailAccResource = createResource({
+      url: 'school.al_ummah.api3.create_email_account',
+      params: {
+        email_id: '',
+        password: ''
       },
-      steps: [
-        { title: 'Email Account Setup (Optional)', component: 'EmailAccountSetup' },
-        { title: 'Academic Year & Terms', component: 'AcademicYearTerms' },
-        { title: 'Use Previous Data', component: 'UsePreviousData' },
-        { title: 'Select Institution Type & Classes', component: 'ProgramSelection' },
-        { title: 'Subjects and Divisions', component: 'SubjectsDivisions' }
-      ]
-    };
-  },
-  created() {
-    this.fetchPreviousData();
-  },
-  methods: {
-    handleFieldUpdate(payload) {
-      this.formValues[payload.field] = payload.value;
-    },
-    handleFieldArrayUpdate(payload) {
-      this.formValues[payload.field] = payload.value;
-    },
-    autoCreateClasses({ classNames }) {
-      const currentClasses = [...this.formValues.classes];
+      onSuccess: () => {
+        alert('Email account setup successfully!');
+      },
+      onError: (err) => {
+        console.error('Error setting up email account:', err);
+        alert('Error setting up email account.');
+      }
+    });
+
+    const quickSetupResource = createResource({
+      url: 'school.al_ummah.api3.quick_setup',
+      params: {
+        values: {}
+      },
+      onSuccess: () => {
+        submitSuccess.value = true;
+        currentStep.value++;
+        isSubmitting.value = false;
+        showResultMessage.value = true;
+      },
+      onError: (err) => {
+        submitSuccess.value = false;
+        errorMessage.value = err.messages?.[0] || 'An error occurred while submitting the form.';
+        console.error('Submission error:', err);
+        isSubmitting.value = false;
+        showResultMessage.value = true;
+      }
+    });
+
+    // Methods
+    function autoCreateClasses({ classNames }) {
+      const currentClasses = [...formValues.classes];
       const maxIndex = currentClasses.reduce(
         (max, cls) => Math.max(max, cls.classIndex || 0),
         0
@@ -161,51 +197,47 @@ export default {
         classIndex: maxIndex + index + 1
       }));
 
-      this.formValues.classes = [...currentClasses, ...newClasses];
-    },
-    async fetchPreviousData() {
-      try {
-        const raw = await previousData();
-        const data = raw.message || [];
-        this.previousDataList = data.map(item => ({
-          ...item,
-          academicYear: JSON.parse(item.json_data).academicYear,
-        }));
-      } catch (error) {
-        console.error('Error fetching previous data:', error);
-      }
-    },
-    updateField({ field, value }) {
-      this.formValues[field] = value;
-    },
-    updateFieldArray({ field, index, subField, value }) {
+      formValues.classes = [...currentClasses, ...newClasses];
+    }
+
+    function fetchPreviousData() {
+      previousDataResource.reload();
+    }
+
+    function updateField({ field, value }) {
+      formValues[field] = value;
+    }
+
+    function updateFieldArray({ field, index, subField, value }) {
       if (index !== undefined && subField) {
-        this.formValues[field][index][subField] = value;
+        formValues[field][index][subField] = value;
       } else if (index !== undefined) {
-        this.formValues[field][index] = value;
+        formValues[field][index] = value;
       } else {
-        this.formValues[field] = value;
+        formValues[field] = value;
       }
-    },
-    async submitEmailAccount() {
-      const { email, googleAppPassword } = this.formValues;
+    }
+
+    async function submitEmailAccount() {
+      const { email, googleAppPassword } = formValues;
       if (!email || !googleAppPassword) {
         alert('Please provide both email and Google app password.');
         return;
       }
 
-      try {
-        await setEmailAcc({ email_id: email, password: googleAppPassword });
-        alert('Email account setup successfully!');
-      } catch (error) {
-        console.error('Error setting up email account:', error);
-        alert('Error setting up email account.');
-      }
-    },
-    autoCreateTerms() {
-      const numberOfTerms = parseInt(this.formValues.numberOfTerms, 10);
-      const startDate = new Date(this.formValues.academicYearStart);
-      const endDate = new Date(this.formValues.academicYearEnd);
+      setEmailAccResource.update({
+        params: {
+          email_id: email,
+          password: googleAppPassword
+        }
+      });
+      setEmailAccResource.submit();
+    }
+
+    function autoCreateTerms() {
+      const numberOfTerms = parseInt(formValues.numberOfTerms, 10);
+      const startDate = new Date(formValues.academicYearStart);
+      const endDate = new Date(formValues.academicYearEnd);
 
       if (!numberOfTerms || numberOfTerms <= 0) {
         alert("Please enter a valid number of terms.");
@@ -247,9 +279,10 @@ export default {
         termStart.setDate(termStart.getDate() + 1);
       }
 
-      this.formValues.terms = terms;
-    },
-    usePreviousData(selectedData) {
+      formValues.terms = terms;
+    }
+
+    function usePreviousData(selectedData) {
       if (!selectedData?.json_data) {
         console.error('Invalid or missing previous data');
         return;
@@ -257,54 +290,52 @@ export default {
 
       try {
         const parsedData = JSON.parse(selectedData.json_data);
-        this.formValues.classes = parsedData.classes || [];
-        this.formValues.subjects = parsedData.subjects || [];
+        formValues.classes = parsedData.classes || [];
+        formValues.subjects = parsedData.subjects || [];
       } catch (error) {
         console.error('Error parsing previous data:', error);
         alert('Failed to load previous data. Please try another selection.');
       }
-    },
-    nextStep() {
-      if (this.currentStep < this.steps.length - 1) {
-        this.currentStep++;
+    }
+
+    function nextStep() {
+      if (currentStep.value < steps.value.length - 1) {
+        currentStep.value++;
       } else {
-        this.submitForm();
+        submitForm();
       }
-    },
-    prevStep() {
-      if (this.currentStep > 0) {
-        this.currentStep--;
+    }
+
+    function prevStep() {
+      if (currentStep.value > 0) {
+        currentStep.value--;
       }
-    },
-    async submitForm() {
-      this.isSubmitting = true;
-      this.showResultMessage = false;
-      this.submitSuccess = false;
-      this.errorMessage = '';
+    }
+
+    function submitForm() {
+      isSubmitting.value = true;
+      showResultMessage.value = false;
+      submitSuccess.value = false;
+      errorMessage.value = '';
 
       const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes'];
-      const missingFields = this.checkMissingFields(this.formValues, exceptions);
+      const missingFields = checkMissingFields(formValues, exceptions);
 
       if (missingFields.length > 0) {
         alert(`Please fill in the following fields:\n - ${missingFields.join('\n- ')}`);
-        this.isSubmitting = false;
+        isSubmitting.value = false;
         return;
       }
 
-      try {
-        await quickSetup({ values: this.formValues });
-        this.submitSuccess = true;
-        this.currentStep++;
-      } catch (error) {
-        this.submitSuccess = false;
-        this.errorMessage = error.message || 'An error occurred while submitting the form.';
-        console.error('Submission error:', error);
-      } finally {
-        this.isSubmitting = false;
-        this.showResultMessage = true;
-      }
-    },
-    checkMissingFields(values, exceptions) {
+      quickSetupResource.update({
+        params: {
+          values: { ...formValues }
+        }
+      });
+      quickSetupResource.submit();
+    }
+
+    function checkMissingFields(values, exceptions) {
       const missingFields = [];
 
       Object.entries(values).forEach(([key, value]) => {
@@ -321,6 +352,34 @@ export default {
 
       return missingFields;
     }
+
+    // Fetch initial data on mount
+    onMounted(() => {
+      fetchPreviousData();
+    });
+
+    return {
+      currentStep,
+      previousDataList,
+      isSubmitting,
+      showResultMessage,
+      submitSuccess,
+      errorMessage,
+      formValues,
+      steps,
+      quickSetupResource,
+      autoCreateClasses,
+      fetchPreviousData,
+      updateField,
+      updateFieldArray,
+      submitEmailAccount,
+      autoCreateTerms,
+      usePreviousData,
+      nextStep,
+      prevStep,
+      submitForm,
+      checkMissingFields
+    };
   }
 };
 </script>

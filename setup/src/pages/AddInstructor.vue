@@ -1,4 +1,3 @@
-```vue
 <template>
   <div class="enrollment-container">
     <div class="header">
@@ -109,10 +108,11 @@
               v-model="teacherData.className" 
               class="picker"
               @change="onClassChange"
+              :disabled="classesResource.loading"
             >
               <option :value="null">Select Class / Program</option>
-              <option v-for="cls in classes" :key="cls" :value="cls">
-                {{ cls }}
+              <option v-for="cls in classes" :key="cls.name" :value="cls.name">
+                {{ cls.name }}
               </option>
             </select>
             <span class="error-message" v-if="errors.className">{{ errors.className }}</span>
@@ -123,11 +123,11 @@
             <select 
               v-model="teacherData.divisionName" 
               class="picker"
-              :disabled="!teacherData.className"
+              :disabled="!teacherData.className || divisionsResource.loading"
             >
               <option :value="null">Select Division / Student Group</option>
-              <option v-for="div in divisions" :key="div" :value="div">
-                {{ div }}
+              <option v-for="div in divisions" :key="div.name" :value="div.name">
+                {{ div.name }}
               </option>
             </select>
             <span class="error-message" v-if="errors.divisionName">{{ errors.divisionName }}</span>
@@ -179,9 +179,9 @@
         <button 
           class="enroll-button" 
           @click="validateAndSubmit"
-          :disabled="isLoading"
+          :disabled="isLoading || enrollTeacherResource.loading"
         >
-          <span v-if="isLoading" class="button-content">
+          <span v-if="isLoading || enrollTeacherResource.loading" class="button-content">
             <span class="spinner"></span> Processing...
           </span>
           <span v-else class="button-content">
@@ -195,7 +195,7 @@
         <button 
           class="reset-button" 
           @click="resetForm"
-          :disabled="isLoading"
+          :disabled="isLoading || enrollTeacherResource.loading"
         >
           Reset Form
         </button>
@@ -209,185 +209,222 @@
 </template>
 
 <script>
-import { enrollTeacher, getClasses, getDivisions1 } from "../utils/apiUtils";
-import '@/styles/form.css'
+import { createResource } from 'frappe-ui';
+import { reactive, ref, onMounted } from 'vue';
+import '@/styles/form.css';
 
 export default {
-  data() {
-    return {
-      teacherData: {
-        firstName: "",
-        middleName: "",
-        lastName: "",
-        gender: "",
-        mobile: "",
-        email: "",
-        dob: "",
-        doj: "",
-        panNumber: "",
-        bankName: "",
-        accountNumber: "",
-        ifscCode: "",
-        designation: "",
-        address: "",
-        className: null,
-        divisionName: null,
-        attendanceDeviceId: "",
-      },
-      classes: [],
-      divisions: [],
-      isLoading: false,
-      message: null,
-      errors: {}
-    };
-  },
-  async created() {
-    await this.fetchClasses();
-  },
-  methods: {
-    async fetchClasses() {
-      try {
-        const response = await getClasses({ values: {} });
-        this.classes = response.message 
-          ? response.message.map(cls => cls.name).filter(name => name)
-          : [];
-        console.log('Processed classes:', this.classes);
-      } catch (error) {
-        console.error("Error fetching classes:", error);
-        this.showMessage("Error fetching classes", "error");
-      }
-    },
-    
-    async onClassChange() {
-      this.teacherData.divisionName = null;
-      this.errors.divisionName = "";
-      
-      if (this.teacherData.className) {
-        try {
-          const response = await getDivisions1({ 
-            values: { classId: this.teacherData.className } 
-          });
-          this.divisions = response.message 
-            ? response.message.map(div => div.name).filter(name => name)
-            : [];
-          console.log(`Divisions for ${this.teacherData.className}:`, this.divisions);
-        } catch (error) {
-          console.error("Error fetching divisions:", error);
-          this.showMessage(`Error fetching divisions for ${this.teacherData.className}`, "error");
-        }
-      } else {
-        this.divisions = [];
-      }
-    },
+  setup() {
+    // Reactive teacher data
+    const teacherData = reactive({
+      firstName: "",
+      middleName: "",
+      lastName: "",
+      gender: "",
+      mobile: "",
+      email: "",
+      dob: "",
+      doj: "",
+      panNumber: "",
+      bankName: "",
+      accountNumber: "",
+      ifscCode: "",
+      designation: "",
+      address: "",
+      className: null,
+      divisionName: null,
+      attendanceDeviceId: "",
+    });
 
-    validateForm() {
-      this.errors = {};
+    // State variables
+    const classes = ref([]);
+    const divisions = ref([]);
+    const isLoading = ref(false);
+    const message = ref(null);
+    const errors = reactive({});
+
+    // API Resources
+    const classesResource = createResource({
+      url: 'school.al_ummah.api3.get_classes',
+      params: { values: {} },
+      onSuccess: (data) => {
+        classes.value = Array.isArray(data) ? data : [];
+        console.log('Classes loaded:', classes.value);
+      },
+      onError: (err) => {
+        console.error('Error fetching classes:', err);
+        classes.value = [];
+      }
+    });
+
+    const divisionsResource = createResource({
+      url: 'school.al_ummah.api3.get_divisions1',
+      params: {
+        values: { classId: teacherData.className }
+      },
+      onSuccess: (data) => {
+        divisions.value = Array.isArray(data) ? data : [];
+        console.log('Divisions loaded:', divisions.value);
+      },
+      onError: (err) => {
+        console.error('Error fetching divisions:', err);
+        divisions.value = [];
+      }
+    });
+
+    const enrollTeacherResource = createResource({
+      url: 'school.al_ummah.api3.enroll_single_instructor',
+      params: {
+        teacher: {
+          "First Name": teacherData.firstName,
+          "Middle Name": teacherData.middleName,
+          "Last Name": teacherData.lastName,
+          "Gender": teacherData.gender,
+          "Mobile": teacherData.mobile,
+          "Email": teacherData.email,
+          "Date of Birth": teacherData.dob,
+          "Date of Joining": teacherData.doj,
+          "PAN Number": teacherData.panNumber,
+          "Bank Name": teacherData.bankName,
+          "Bank A/C No.": teacherData.accountNumber,
+          "IFSC Code": teacherData.ifscCode,
+          "Designation": teacherData.designation,
+          "Current Address": teacherData.address,
+          "Class": teacherData.className || "",
+          "Division": teacherData.divisionName || "",
+          "Attendance Device ID (Biometric/RF tag ID)": teacherData.attendanceDeviceId,
+        }
+      },
+      onSuccess: (response) => {
+        isLoading.value = false;
+        // Display the raw API response
+        if (response && response.message) {
+          showMessage(response.message, 'success');
+        } else {
+          showMessage('Teacher enrollment completed', 'success');
+        }
+      },
+      onError: (err) => {
+        isLoading.value = false;
+        // Display the raw API error response
+        if (err.messages && err.messages.length > 0) {
+          showMessage(err.messages[0], 'error');
+        } else if (err.message) {
+          showMessage(err.message, 'error');
+        } else {
+          showMessage('An error occurred', 'error');
+        }
+      }
+    });
+
+    // Fetch initial data on mount
+    onMounted(() => {
+      classesResource.reload();
+    });
+
+    // Methods
+    function onClassChange() {
+      teacherData.divisionName = null;
+      errors.divisionName = '';
+      if (teacherData.className) {
+        divisionsResource.update({
+          params: { values: { classId: teacherData.className } }
+        });
+        divisionsResource.reload();
+      } else {
+        divisions.value = [];
+      }
+    }
+
+    function validateForm() {
+      Object.assign(errors, {});
       let isValid = true;
 
-      if (!this.teacherData.firstName.trim()) {
-        this.errors.firstName = "First name is required";
+      if (!teacherData.firstName.trim()) {
+        errors.firstName = "First name is required";
         isValid = false;
       }
       
-      if (!this.teacherData.lastName.trim()) {
-        this.errors.lastName = "Last name is required";
+      if (!teacherData.lastName.trim()) {
+        errors.lastName = "Last name is required";
         isValid = false;
       }
       
-      if (!this.teacherData.gender) {
-        this.errors.gender = "Gender is required";
+      if (!teacherData.gender) {
+        errors.gender = "Gender is required";
         isValid = false;
       }
       
-      if (!this.teacherData.dob) {
-        this.errors.dob = "Date of birth is required";
+      if (!teacherData.dob) {
+        errors.dob = "Date of birth is required";
         isValid = false;
       }
       
-      if (!this.teacherData.email.trim()) {
-        this.errors.email = "Email is required";
+      if (!teacherData.email.trim()) {
+        errors.email = "Email is required";
         isValid = false;
-      } else if (!this.validEmail(this.teacherData.email)) {
-        this.errors.email = "Please enter a valid email";
+      } else if (!validEmail(teacherData.email)) {
+        errors.email = "Please enter a valid email";
         isValid = false;
       }
       
-      if (!this.teacherData.mobile.trim()) {
-        this.errors.mobile = "Mobile number is required";
+      if (!teacherData.mobile.trim()) {
+        errors.mobile = "Mobile number is required";
         isValid = false;
-      } else if (!this.validMobile(this.teacherData.mobile)) {
-        this.errors.mobile = "Please enter a valid mobile number";
+      } else if (!validMobile(teacherData.mobile)) {
+        errors.mobile = "Please enter a valid mobile number";
         isValid = false;
       }
 
       return isValid;
-    },
+    }
 
-    validEmail(email) {
+    function validEmail(email) {
       const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       return re.test(email);
-    },
+    }
 
-    validMobile(mobile) {
+    function validMobile(mobile) {
       const re = /^[0-9]{10,15}$/;
       return re.test(mobile);
-    },
+    }
 
-    async validateAndSubmit() {
-      if (this.validateForm()) {
-        await this.handleEnrollTeacher();
+    function validateAndSubmit() {
+      if (validateForm()) {
+        submitForm();
       }
-    },
+    }
 
-    async handleEnrollTeacher() {
-      this.isLoading = true;
-      this.showMessage(null);
-
-      try {
-        const teacher = {
-          "First Name": this.teacherData.firstName,
-          "Middle Name": this.teacherData.middleName,
-          "Last Name": this.teacherData.lastName,
-          "Gender": this.teacherData.gender,
-          "Mobile": this.teacherData.mobile,
-          "Email": this.teacherData.email,
-          "Date of Birth": this.teacherData.dob,
-          "Date of Joining": this.teacherData.doj,
-          "PAN Number": this.teacherData.panNumber,
-          "Bank Name": this.teacherData.bankName,
-          "Bank A/C No.": this.teacherData.accountNumber,
-          "IFSC Code": this.teacherData.ifscCode,
-          "Designation": this.teacherData.designation,
-          "Current Address": this.teacherData.address,
-          "Class": this.teacherData.className || "",
-          "Division": this.teacherData.divisionName || "",
-          "Attendance Device ID (Biometric/RF tag ID)": this.teacherData.attendanceDeviceId,
-        };
-
-        const response = await enrollTeacher({ teacher });
-        console.log("API Response:", response);
-
-        if (response.success) {
-          this.showMessage("✅ Teacher enrolled successfully!", "success");
-          // this.resetForm();
-        } else {
-          let userMessage = response.error || "Failed to enroll teacher";
-          this.showMessage(userMessage, "error");
-          console.error("Enrollment error details:", {
-            error: response.error,
-            message: response.message
-          });
+    function submitForm() {
+      isLoading.value = true;
+      enrollTeacherResource.update({
+        params: {
+          teacher: {
+            "First Name": teacherData.firstName,
+            "Middle Name": teacherData.middleName,
+            "Last Name": teacherData.lastName,
+            "Gender": teacherData.gender,
+            "Mobile": teacherData.mobile,
+            "Email": teacherData.email,
+            "Date of Birth": teacherData.dob,
+            "Date of Joining": teacherData.doj,
+            "PAN Number": teacherData.panNumber,
+            "Bank Name": teacherData.bankName,
+            "Bank A/C No.": teacherData.accountNumber,
+            "IFSC Code": teacherData.ifscCode,
+            "Designation": teacherData.designation,
+            "Current Address": teacherData.address,
+            "Class": teacherData.className || "",
+            "Division": teacherData.divisionName || "",
+            "Attendance Device ID (Biometric/RF tag ID)": teacherData.attendanceDeviceId,
+          }
         }
-      } catch (error) {
-        console.error("Unexpected error in handleEnrollTeacher:", error);
-        this.showMessage(error.message || "An unexpected error occurred. Please try again.", "error");
-      } finally {
-        this.isLoading = false;
-      }
-    },
+      });
+      enrollTeacherResource.submit();
+    }
 
-    resetForm() {
-      this.teacherData = {
+    function resetForm() {
+      Object.assign(teacherData, {
         firstName: "",
         middleName: "",
         lastName: "",
@@ -405,266 +442,33 @@ export default {
         className: null,
         divisionName: null,
         attendanceDeviceId: "",
-      };
-      this.divisions = [];
-      this.errors = {};
-      this.showMessage(null);
-    },
+      });
+      divisions.value = [];
+      Object.assign(errors, {});
+      showMessage(null);
+    }
 
-    showMessage(text, type = "info") {
-      this.message = text ? { text, type } : null;
+    function showMessage(text, type = "info") {
+      message.value = text ? { text, type } : null;
       if (text && type !== "error") {
-        setTimeout(() => this.showMessage(null), 5000);
+        setTimeout(() => showMessage(null), 5000);
       }
     }
-  },
+
+    return {
+      teacherData,
+      classes,
+      divisions,
+      isLoading,
+      message,
+      errors,
+      classesResource,
+      divisionsResource,
+      enrollTeacherResource,
+      onClassChange,
+      validateAndSubmit,
+      resetForm
+    };
+  }
 };
 </script>
-
-<!-- <style scoped>
-.enrollment-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.title {
-  font-size: 2.2rem;
-  color: #2c3e50;
-  margin-bottom: 0.5rem;
-}
-
-.subtitle {
-  font-size: 1.1rem;
-  color: #7f8c8d;
-  margin: 0;
-}
-
-.form-card {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  padding: 2rem;
-}
-
-.form-title {
-  font-size: 1.5rem;
-  color: #2c3e50;
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #eee;
-}
-
-.form-section {
-  margin-bottom: 2rem;
-}
-
-.section-title {
-  font-size: 1.1rem;
-  color: #34495e;
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-}
-
-.section-title::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 16px;
-  background: #3498db;
-  margin-right: 8px;
-  border-radius: 2px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: #34495e;
-  font-size: 0.95rem;
-}
-
-.form-group.required label::after {
-  content: " *";
-  color: #e74c3c;
-}
-
-.input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-
-.input:focus {
-  outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-}
-
-.textarea {
-  min-height: 100px;
-  resize: vertical;
-}
-
-.picker {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-  background-color: white;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
-}
-
-.error-message {
-  display: block;
-  color: #e74c3c;
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #eee;
-}
-
-.enroll-button {
-  background: #27ae60;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  transition: background 0.2s, transform 0.1s;
-}
-
-.enroll-button:hover {
-  background: #2ecc71;
-}
-
-.enroll-button:active {
-  transform: scale(0.98);
-}
-
-.enroll-button:disabled {
-  background: #95a5a6;
-  cursor: not-allowed;
-}
-
-.reset-button {
-  background: #f5f5f5;
-  color: #7f8c8d;
-  border: 1px solid #ddd;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.reset-button:hover {
-  background: #ecf0f1;
-}
-
-.reset-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.button-content {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.icon {
-  width: 18px;
-  height: 18px;
-}
-
-.spinner {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.message {
-  padding: 1rem;
-  border-radius: 6px;
-  margin-top: 1.5rem;
-  font-weight: 500;
-}
-
-.message.success {
-  background: #d5f5e3;
-  color: #27ae60;
-}
-
-.message.error {
-  background: #fadbd8;
-  color: #e74c3c;
-}
-
-.message.info {
-  background: #d6eaf8;
-  color: #2980b9;
-}
-
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .form-actions {
-    flex-direction: column;
-  }
-  
-  .enroll-button,
-  .reset-button {
-    width: 100%;
-  }
-}
-</style> -->
-```

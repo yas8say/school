@@ -14,6 +14,103 @@ from frappe.auth import get_logged_user
 
 #qdsr itqf nmqx zmni
 
+import frappe
+
+@frappe.whitelist(allow_guest=True)
+def add_guardian_to_student(student_id, student_name, guardian_info):
+    try:
+        guardian_no = guardian_info.get("guardian_no")
+        guardian_name = guardian_info.get("guardian_name")
+        if not guardian_no:
+            frappe.throw("Guardian number missing.")
+        if not guardian_name:
+            frappe.throw("Guardian name missing.")
+
+        # Extract student's last name for guardian email
+        student_name_parts = student_name.strip().split()
+        last_name = student_name_parts[-1] if len(student_name_parts) > 1 else "guardian"
+
+        # Guardian first name comes from guardian_name
+        first_name = guardian_name.strip()
+
+        # Generate email properly using student's last name
+        guardian_email = (
+            guardian_info.get("guardian_email")
+            or generate_unique_email(first_name, last_name, guardian_no)
+        )
+
+        # Check if Guardian exists
+        existing_guardian = frappe.db.get_value("Guardian", {"mobile_number": guardian_no}, "name")
+
+        if existing_guardian:
+            guardian_name = frappe.db.get_value("Guardian", {"name": existing_guardian}, "guardian_name")
+        else:
+            # Check if User exists by mobile or email
+            existing_user = (
+                frappe.db.get_value("User", {"mobile_no": guardian_no}, "name") or
+                frappe.db.get_value("User", {"email": guardian_email}, "name")
+            )
+
+            if existing_user:
+                user_name = existing_user
+                # Ensure Guardian role is assigned
+                user_doc = frappe.get_doc("User", user_name)
+                if "Guardian" not in [r.role for r in user_doc.roles]:
+                    user_doc.add_roles("Guardian")
+            else:
+                # Create new User
+                user_doc = frappe.get_doc({
+                    "doctype": "User",
+                    "mobile_no": guardian_no,
+                    "first_name": guardian_name,
+                    "email": guardian_email,
+                }).insert(ignore_permissions=True)
+                user_doc.add_roles("Guardian")
+                user_name = user_doc.name
+
+            # Create Guardian and link to User
+            guardian_doc = frappe.get_doc({
+                "doctype": "Guardian",
+                "guardian_name": guardian_name,
+                "mobile_number": guardian_no,
+                "email_address": guardian_email,
+                "user": user_name,
+                "date_of_birth": guardian_info.get("date_of_birth"),
+                "occupation": guardian_info.get("occupation"),
+                "designation": guardian_info.get("designation"),
+                "work_address": guardian_info.get("work_address"),
+                "education": guardian_info.get("education"),
+            }).insert(ignore_permissions=True)
+
+            existing_guardian = guardian_doc.name
+
+        # Link Guardian to Student
+        student_doc = frappe.get_doc("Student", student_id)
+        if any(g.guardian == existing_guardian for g in student_doc.guardians):
+            return "Guardian already linked."
+
+        student_guardian = student_doc.append("guardians", {})
+        student_guardian.guardian = existing_guardian
+        student_guardian.guardian_name = guardian_name
+
+        # Handle relation Select field safely
+        relation = guardian_info.get("relation", "Others")
+        allowed = [opt.strip() for opt in frappe.get_meta("Student Guardian").get_field("relation").options.split("\n")]
+        if relation not in allowed:
+            relation = "Others"
+        student_guardian.relation = relation
+
+        student_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+
+        return "Guardian linked successfully."
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Add Guardian Error")
+        return f"Error: {str(e)}"
+
+
+
 @frappe.whitelist(allow_guest=True)
 def create_email_account(email_id, password, append_to=None):
     if "Administrator" not in frappe.get_roles(frappe.session.user):
@@ -324,20 +421,113 @@ import random
 import string
 import re
 
+# @frappe.whitelist()
+# def bulk_enroll_students(className, divisionName, students):
+#     print(f"Received {len(students)} students")
+
+#     # --- Security check ---
+#     if "Administrator" not in frappe.get_roles(frappe.session.user):
+#         frappe.throw("You are not authorized to perform this action.")
+
+#     # --- Basic validation ---
+#     if not className or not divisionName or not students:
+#         frappe.throw("Class, Division, and Students data are required.")
+
+#     # --- Fetch academic context ---
+#     edu_settings = frappe.get_single("Education Settings")
+#     year = edu_settings.current_academic_year
+#     term = edu_settings.current_academic_term
+
+#     # --- Helper to validate student data ---
+#     def is_valid_student(s):
+#         roll = safe_int(s.get("Roll No"))
+#         gr = s.get("GR Number", "").strip()
+#         return roll != float("inf") and roll > 0 and gr
+
+#     valid_students = [s for s in students if is_valid_student(s)]
+#     invalid_students = [s for s in students if not is_valid_student(s)]
+#     for s in invalid_students:
+#         print("Skipping invalid row:", s)
+
+#     # --- Sort by Roll No ---
+#     valid_students.sort(key=lambda s: safe_int(s.get("Roll No")))
+
+#     try:
+#         # --- Enroll each student ---
+#         for student in valid_students:
+#             full_name = f"{student.get('First Name', '').strip()} {student.get('Middle Name', '').strip()} {student.get('Last Name', '').strip()}".strip()
+#             print(f">>> Enrolling student: {full_name} | Roll No: {student.get('Roll No')}")
+#             enroll_student(student, className, divisionName, year, term)
+
+#         # --- Commit enrollments ---
+#         frappe.db.commit()
+#         print("✅ All students enrolled successfully. Now updating Student Group...")
+
+#         # --- Fetch Student Group ---
+#         student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
+#         if not student_group:
+#             frappe.throw(f"No Student Group found for Program '{className}' and Division '{divisionName}'")
+
+#         # --- Fetch enrolled students from Program Enrollment ---
+#         enrolled_students = get_program_enrollment(
+#             academic_year=year,
+#             academic_term=term,
+#             program=className,
+#             batch=divisionName,
+#         )
+
+#         # --- Prepare existing data ---
+#         existing_student_ids = {d.student for d in student_group.students}
+#         max_roll_no = max([d.group_roll_number or 0 for d in student_group.students], default=0)
+
+#         # --- Add missing students to Student Group ---
+#         added_count = 0
+#         for s in enrolled_students:
+#             if s.student not in existing_student_ids:
+#                 child = student_group.append("students", {})
+#                 child.student = s.student
+#                 child.student_name = s.student_name
+#                 child.active = 1
+#                 max_roll_no += 1
+#                 child.group_roll_number = max_roll_no
+#                 added_count += 1
+
+#         # --- Save and commit group update ---
+#         if added_count > 0:
+#             student_group.save(ignore_permissions=True)
+#             frappe.db.commit()
+#             print(f"✅ Added {added_count} new students to Student Group '{student_group.name}'")
+#         else:
+#             print("ℹ️ All students already present in Student Group.")
+
+#     except Exception as e:
+#         frappe.db.rollback()
+#         frappe.log_error(frappe.get_traceback(), "Bulk Enroll Failed")
+#         frappe.throw(f"Enrollment failed: {str(e)}")
+
+#     return {
+#         "status": "success",
+#         "message": f"{len(valid_students)} students enrolled successfully and synced to Student Group!"
+#     }
+
 @frappe.whitelist()
 def bulk_enroll_students(className, divisionName, students):
     print(f"Received {len(students)} students")
 
+    # --- Security check ---
     if "Administrator" not in frappe.get_roles(frappe.session.user):
         frappe.throw("You are not authorized to perform this action.")
 
+    # --- Basic validation ---
     if not className or not divisionName or not students:
         frappe.throw("Class, Division, and Students data are required.")
 
+    # --- Fetch academic context ---
     edu_settings = frappe.get_single("Education Settings")
     year = edu_settings.current_academic_year
     term = edu_settings.current_academic_term
 
+    # --- Validate student data ---
     def is_valid_student(s):
         roll = safe_int(s.get("Roll No"))
         gr = s.get("GR Number", "").strip()
@@ -348,25 +538,46 @@ def bulk_enroll_students(className, divisionName, students):
     for s in invalid_students:
         print("Skipping invalid row:", s)
 
+    # --- Sort by Roll No ---
     valid_students.sort(key=lambda s: safe_int(s.get("Roll No")))
 
     try:
+        # --- Get existing Student Group ---
+        student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
+        if not student_group:
+            frappe.throw(f"No Student Group found for Program '{className}' and Division '{divisionName}'")
+
+        # --- Cache existing students & roll numbers ---
+        existing_student_ids = {d.student for d in student_group.students}
+        next_roll = max([d.group_roll_number or 0 for d in student_group.students], default=0)
+
+        # --- Single loop: Enroll & add to group ---
+        added_count = 0
         for student in valid_students:
             full_name = f"{student.get('First Name', '').strip()} {student.get('Middle Name', '').strip()} {student.get('Last Name', '').strip()}".strip()
             print(f">>> Enrolling student: {full_name} | Roll No: {student.get('Roll No')}")
+
+            # Enroll student
             enroll_student(student, className, divisionName, year, term)
 
-        # get_students(
-        #     academic_year=year,
-        #     group_based_on="Batch",  # or "Course", or appropriate value
-        #     academic_term=term,
-        #     program=className,
-        #     batch=divisionName,
-        #     student_category=None,
-        #     course=None,
-        # )
-        
-        frappe.db.commit()
+            # Get enrolled student ID
+            student_id = frappe.db.get_value("Student", {"gr_number": student.get("GR Number")}, "name")
+
+            # Add to Student Group if not already there
+            if student_id and student_id not in existing_student_ids:
+                next_roll += 1
+                add_student_to_group(student_group, student_id, full_name, next_roll)
+                existing_student_ids.add(student_id)
+                added_count += 1
+
+        # --- Save group once at end ---
+        if added_count > 0:
+            student_group.save(ignore_permissions=True)
+            frappe.db.commit()
+            print(f"✅ Added {added_count} students to Student Group '{student_group.name}'")
+        else:
+            frappe.db.commit()
+            print("ℹ️ All students already exist in the group.")
 
     except Exception as e:
         frappe.db.rollback()
@@ -375,9 +586,16 @@ def bulk_enroll_students(className, divisionName, students):
 
     return {
         "status": "success",
-        "message": f"{len(valid_students)} students enrolled successfully!"
+        "message": f"{len(valid_students)} students enrolled and synced with Student Group!"
     }
 
+def add_student_to_group(student_group, student_id, student_name, roll_no):
+    """Append a student to the Student Group child table."""
+    child = student_group.append("students", {})
+    child.student = student_id
+    child.student_name = student_name
+    child.active = 1
+    child.group_roll_number = roll_no
 
 def safe_int(val):
     try:
@@ -411,118 +629,144 @@ def generate_unique_phone():
 @frappe.whitelist()
 def enroll_student(student, className, divisionName, year, term):
     first_name = student["First Name"]
-    middle_name = student["Middle Name"]
+    middle_name = student.get("Middle Name", "")
     last_name = student["Last Name"]
     full_name = " ".join(part for part in [first_name, middle_name, last_name] if part.strip())
-    print(full_name)
     email = student.get("Email Address")
 
-    if email:
-        if frappe.db.exists("Student", {"student_email_id": email}):
-            frappe.local.response["message"] = _(f"Duplicate email for: {full_name}, {email}")
-            raise frappe.ValidationError(_("Duplicate email"))
+    print(student)
+    # ✅ Extract guardian details from student object
+    guardian_info = {
+        "guardian_name": student.get("Guardian Name"),
+        "guardian_email": student.get("Guardian Email"),
+        "guardian_no": student.get("Guardian Number"),
+        "relation": student.get("Relation"),
+        "date_of_birth": student.get("Guardian Date of Birth"),
+        "occupation": student.get("Guardian Occupation"),
+        "designation": student.get("Guardian Designation"),
+        "work_address": student.get("Guardian Work Address"),
+        "education": student.get("Guardian Education"),
+    }
+
+    print("Guardian Info:", guardian_info)
+
+    # --- Duplicate Checks ---
+    if email and frappe.db.exists("Student", {"student_email_id": email}):
+        frappe.throw(_("Duplicate email for: {0}, {1}").format(full_name, email))
 
     if frappe.db.exists("Student", {"gr_num": student.get("GR Number")}):
-        frappe.local.response["message"] = _(f"Duplicate GR Number for: {full_name}, {student.get('GR Number')}")
-        raise frappe.ValidationError(_("Duplicate GR Number"))
+        frappe.throw(_("Duplicate GR Number for: {0}, {1}").format(full_name, student.get("GR Number")))
 
-    try:
-        if not email or "@" not in email:
-            email = generate_unique_email(first_name, last_name, student.get("GR Number", ""))
+    # --- Generate fallback email ---
+    if not email or "@" not in email:
+        email = generate_unique_email(first_name, last_name, student.get("GR Number", ""))
 
-    except Exception as e:  
-        frappe.log_error(frappe.get_traceback(), "Enroll Student - Email Error")
-        raise
-
+    # --- Create User ---
     phone = str(student.get("Phone Number") or generate_unique_phone())
+    user = frappe.new_doc("User")
+    user.first_name = first_name
+    user.middle_name = middle_name
+    user.last_name = last_name
+    user.email = email
+    user.username = f"{first_name.lower()}{student.get('GR Number', '')}".replace(" ", "")
+    if not frappe.db.exists("User", {"mobile_no": phone}):
+        user.mobile_no = phone
+    user.send_welcome_email = 0
+    user.enabled = 1
+    user.user_type = "Website User"
+    user.save(ignore_permissions=True)
 
-    try:
-        # user = frappe.db.exists("User", {"email": email})
-        user = frappe.new_doc("User")
-        user.first_name = first_name
-        if middle_name:
-            user.middle_name = middle_name
-        user.last_name = last_name
-        user.email = email
-        user.username = f"{first_name.lower()}{student.get('GR Number', '')}".replace(" ", "")
-        if not frappe.db.exists("User", {"mobile_no": phone}):
-            user.mobile_no = phone
-        user.send_welcome_email = 0
-        user.enabled = 1
-        user.user_type = "Website User"
-        user.save()
+    # --- Create Student ---
+    student_doc = frappe.new_doc("Student")
+    student_doc.first_name = first_name
+    student_doc.middle_name = middle_name
+    student_doc.last_name = last_name
+    student_doc.student_email_id = email
+    student_doc.user = email
+    student_doc.student_mobile_number = phone
+    student_doc.gr_number = student["GR Number"]
+    student_doc.save(ignore_permissions=True)
 
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Enroll Student - User Error")
-        raise
+    # --- Create Program Enrollment ---
+    program_enrollment = frappe.new_doc("Program Enrollment")
+    program_enrollment.student = student_doc.name
+    program_enrollment.program = className
+    program_enrollment.student_batch_name = divisionName
+    program_enrollment.academic_year = year
+    program_enrollment.academic_term = term
+    program_enrollment.save(ignore_permissions=True)
+    program_enrollment.submit()
 
-    try:
-        student_doc = frappe.new_doc("Student")
-        student_doc.first_name = first_name
-        student_doc.last_name = last_name
-        if middle_name:
-            student_doc.middle_name = middle_name
-        student_doc.student_email_id = email
-        student_doc.user = email
-        student_doc.student_mobile_number = phone
-        student_doc.gr_num = student["GR Number"]
-        student_doc.save()
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Enroll Student - Student Doc Error")
-        raise
+    # --- Add Guardian ---
+    if guardian_info["guardian_name"] and guardian_info["guardian_no"]:
+        add_guardian_to_student(
+            student_id=student_doc.name,
+            student_name=student_doc.student_name,
+            guardian_info=guardian_info
+        )
 
-    try:
-        program_enrollment = frappe.new_doc("Program Enrollment")
-        program_enrollment.student = student_doc.name
-        program_enrollment.program = className
-        program_enrollment.student_batch_name = divisionName
-        program_enrollment.academic_year = year
-        program_enrollment.academic_term = term
-        # program_enrollment.student_category = 
-        program_enrollment.save()
-        program_enrollment.submit()
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Enroll Student - Program Enrollment Error")
-        raise
-
-    try:
-        student_group = frappe.get_doc("Student Group", {
-            "program": className,
-            "batch": divisionName
-        })
-
-        existing_student_ids = {s.student for s in student_group.students}
-        if student_doc.name not in existing_student_ids:
-            new_row = student_group.append("students", {})
-            new_row.student = student_doc.name
-            new_row.student_name = student_doc.student_name
-
-            student_group.save()
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Enroll Student - Student Group Append Error")
-        raise
 
 
 @frappe.whitelist()
 def enroll_single_student(student_data, className, divisionName):
+    print(student_data, className, divisionName)
+
+    # --- Permission check ---
     if "Administrator" not in frappe.get_roles(frappe.session.user):
         frappe.throw("You are not authorized to perform this action.")
-        
+
+    # --- Basic validation ---
     if not student_data or not className or not divisionName:
         frappe.throw("Student data, class, and division are required.")
-    
+
+    # --- Academic context ---
     edu_settings = frappe.get_single("Education Settings")
     year = edu_settings.current_academic_year
     term = edu_settings.current_academic_term
 
     try:
+        # --- Enroll the student ---
         enroll_student(student_data, className, divisionName, year, term)
+
+        # --- Get the Student doc name after enrollment ---
+        student_id = frappe.db.get_value(
+            "Student", {"gr_number": student_data.get("GR Number")}, "name"
+        )
+        if not student_id:
+            frappe.throw(f"Could not find enrolled Student with GR Number {student_data.get('GR Number')}")
+
+        full_name = " ".join(
+            part for part in [
+                student_data.get("First Name", "").strip(),
+                student_data.get("Middle Name", "").strip(),
+                student_data.get("Last Name", "").strip()
+            ] if part
+        )
+
+        # --- Get the Student Group ---
+        student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
+        if not student_group:
+            frappe.throw(f"No Student Group found for Program '{className}' and Division '{divisionName}'")
+
+        # --- Determine next roll number ---
+        existing_student_ids = {d.student for d in student_group.students}
+        max_roll_no = max([d.group_roll_number or 0 for d in student_group.students], default=0)
+
+        # --- Add to Student Group if not already present ---
+        if student_id not in existing_student_ids:
+            max_roll_no += 1
+            add_student_to_group(student_group, student_id, full_name, max_roll_no)
+            student_group.save(ignore_permissions=True)
+
         frappe.db.commit()
+        print(f"✅ Student {full_name} enrolled and added to Student Group {student_group.name}")
+
     except Exception as e:
         frappe.db.rollback()
         frappe.throw(f"Enrollment failed: {str(e)}")
-    
-    return {"status": "success", "message": "Student enrolled successfully!"}
+
+    return {"status": "success", "message": "Student enrolled and added to Student Group successfully!"}
+
 
 
 @frappe.whitelist()
@@ -652,72 +896,71 @@ def bulk_enroll_instructors(teachers):
 
 
 
+@frappe.whitelist()
 def create_user_and_instructor(email, full_name, first_name, phone, password, role, gender, salutation, date_of_birth, extra_fields=None):
     from frappe import _
 
+    # Check if User exists
+    user_doc = None
     if frappe.db.exists("User", {"email": email}):
-        frappe.local.response["message"] = _(f"Duplicate email for: {full_name}, {email}")
-        raise frappe.ValidationError(_("Duplicate email"))
-
-    if frappe.db.exists("User", {"mobile_no": phone}):
-        frappe.local.response["message"] = _(f"Duplicate phone for: {full_name}, {phone}")
-        raise frappe.ValidationError(_("Duplicate phone"))
-
-    if frappe.db.exists("Instructor", {"instructor_name": full_name}):
-        frappe.local.response["message"] = _(f"Duplicate instructor name: {full_name}")
-        raise frappe.ValidationError(_("Duplicate instructor name"))
+        user_doc = frappe.get_doc("User", {"email": email})
+    elif frappe.db.exists("User", {"mobile_no": phone}):
+        user_doc = frappe.get_doc("User", {"mobile_no": phone})
     
-    attendance_id = extra_fields["Attendance Device ID (Biometric/RF tag ID)"]
+    # If user doesn't exist, create one
+    if not user_doc:
+        user_doc = frappe.get_doc({
+            "doctype": "User",
+            "email": email,
+            "mobile_no": phone,
+            "first_name": first_name,
+            "new_password": password,
+        }).insert(ignore_permissions=True)
 
-    if frappe.db.exists("Employee", {"attendance_device_id": attendance_id}):
-        frappe.local.response["message"] = _(f"Duplicate attendance ID: {attendance_id}")
-        raise frappe.ValidationError(_("Duplicate attendance ID"))
-
-    # Create User
-    user_doc = frappe.get_doc({
-        "doctype": "User",
-        "email": email,
-        "mobile_no": phone,
-        "first_name": first_name,
-        "new_password": password,
-    }).insert(ignore_permissions=True)
-
-    user_doc.add_roles("Instructor", "Academics User")
+    # Add roles if not already assigned
+    for r in ["Instructor", "Academics User"]:
+        if r not in user_doc.get("roles"):
+            user_doc.add_roles(r)
 
     # Create Employee
-    employee_doc = create_employee(
-        email, first_name, phone, gender, salutation, date_of_birth, extra_fields
-    )
-    if not employee_doc:
-        raise Exception("Employee creation failed")
+    employee_doc = None
+    attendance_id = extra_fields.get("Attendance Device ID (Biometric/RF tag ID)") if extra_fields else None
+
+    if attendance_id and frappe.db.exists("Employee", {"attendance_device_id": attendance_id}):
+        employee_doc = frappe.get_doc("Employee", {"attendance_device_id": attendance_id})
+    else:
+        employee_doc = create_employee(email, first_name, phone, gender, salutation, date_of_birth, extra_fields)
+        if not employee_doc:
+            raise Exception("Employee creation failed")
 
     # Create Instructor
-    instructor_doc = frappe.get_doc({
-        "doctype": "Instructor",
-        "instructor_name": full_name,
-        "gender": gender,
-        "employee": employee_doc.name
-    }).insert(ignore_permissions=True)
+    instructor_doc = None
+    if frappe.db.exists("Instructor", {"instructor_name": full_name}):
+        instructor_doc = frappe.get_doc("Instructor", {"instructor_name": full_name})
+    else:
+        instructor_doc = frappe.get_doc({
+            "doctype": "Instructor",
+            "instructor_name": full_name,
+            "gender": gender,
+            "employee": employee_doc.name
+        }).insert(ignore_permissions=True)
 
-    # Add Instructor to Student Group (Division)
+    # Assign Instructor to Student Group (Division)
     if extra_fields:
         division = extra_fields.get("Division")
-        if not division:
-            frappe.msgprint(f"⚠️ Skipping group assignment: No Division for {full_name} ({email})")
-        else:
+        if division:
             try:
-                instructor_name = instructor_doc.name
                 student_group = frappe.get_doc("Student Group", {"student_group_name": division})
-
-                if not any(row.instructor == instructor_name for row in student_group.instructors):
-                    student_group.append("instructors", {
-                        "instructor": instructor_name
-                    })
+                if not any(row.instructor == instructor_doc.name for row in student_group.instructors):
+                    student_group.append("instructors", {"instructor": instructor_doc.name})
                     student_group.save(ignore_permissions=True)
             except Exception as e:
                 frappe.msgprint(f"⚠️ Could not add instructor to division '{division}': {e}")
+        else:
+            frappe.msgprint(f"⚠️ Skipping group assignment: No Division for {full_name} ({email})")
 
     return True
+
 
 
 def create_employee(email, first_name, phone, gender, salutation, date_of_birth, extra_fields=None):

@@ -2,7 +2,7 @@
   <div class="card">
     <h3 class="section-title">Use Previous Data</h3>
     
-    <div v-if="loading" class="loading">Loading previous data...</div>
+    <div v-if="previousDataResource.loading" class="loading">Loading previous data...</div>
     <div v-else>
       <!-- Success Message -->
       <div 
@@ -32,19 +32,20 @@
         Use Previous Data
       </button>
       
-      <div class="switch-container">
+      <!-- <div class="switch-container">
         <label>Don't create classes</label>
         <input 
           type="checkbox" 
           v-model="dontCreateClasses"
           @change="updateDontCreateClasses"
         />
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
 
 <script>
+import { createResource } from 'frappe-ui';
 import { ref, onMounted } from 'vue'
 
 export default {
@@ -54,11 +55,23 @@ export default {
   },
   emits: ['update-field', 'use-previous-data'],
   setup(props, { emit }) {
-    const loading = ref(false)
     const selectedPreviousData = ref(null)
     const dontCreateClasses = ref(props.values.dontCreateClasses || false)
     const showSuccessMessage = ref(false)
     const usedPreviousYear = ref('')
+
+    // API Resource for fetching previous data
+    const previousDataResource = createResource({
+      url: 'school.al_ummah.api3.get_previous_data',
+      params: { values: {} },
+      onSuccess: (data) => {
+        // Data is handled by parent component, but we can use loading state
+        console.log('Previous data loaded successfully');
+      },
+      onError: (err) => {
+        console.error('Error fetching previous data:', err);
+      }
+    });
 
     const handleUsePreviousData = () => {
       if (!selectedPreviousData.value) {
@@ -66,15 +79,12 @@ export default {
         return;
       }
       
-      loading.value = true
-      
       // Emit the event to parent
       emit('use-previous-data', selectedPreviousData.value);
       
       // Set success message
       usedPreviousYear.value = selectedPreviousData.value.academicYear
       showSuccessMessage.value = true
-      loading.value = false
       
       // Hide message after 5 seconds
       setTimeout(() => {
@@ -86,12 +96,19 @@ export default {
       emit('update-field', { field: 'dontCreateClasses', value: dontCreateClasses.value })
     };
 
+    // Fetch data on component mount if not provided by parent
+    onMounted(() => {
+      if (!props.previousDataList || props.previousDataList.length === 0) {
+        previousDataResource.reload();
+      }
+    });
+
     return {
-      loading,
       selectedPreviousData,
       dontCreateClasses,
       showSuccessMessage,
       usedPreviousYear,
+      previousDataResource,
       handleUsePreviousData,
       updateDontCreateClasses
     }

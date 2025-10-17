@@ -2,10 +2,54 @@
   <div class="scroll-view-content">
     <h1 class="title">Students Enrollment Screen</h1>
 
+    <!-- Loading Screen -->
+    <div v-if="enrollStudentsResource.loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <h3 class="text-lg font-medium text-gray-900">Submitting your data...</h3>
+        <p class="mt-2 text-sm text-gray-500">Please wait while we process your information.</p>
+      </div>
+    </div>
+
+    <!-- Success/Failure Message -->
+    <div v-if="showResultMessage" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
+        <div v-if="submitSuccess" class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+          <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div v-else class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+          <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <h3 class="mt-3 text-lg font-medium text-gray-900">
+          {{ submitSuccess ? 'Students Enrolled Successfully!' : 'Enrollment Failed' }}
+        </h3>
+        <p class="mt-2 text-sm text-gray-500">
+          {{ submitSuccess ? 'Students have been successfully enrolled.' : errorMessage || 'An error occurred while enrolling students.' }}
+        </p>
+        <div class="mt-5">
+          <button
+            @click="showResultMessage = false"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- White Card for Select Year, Class and Division -->
     <div class="white-card">
       <h2 class="card-title">Select a Year</h2>
-      <select v-model="selectedYear" class="picker2" @change="onYearChange">
+      <select 
+        v-model="selectedYear" 
+        class="picker2" 
+        @change="onYearChange"
+        :disabled="academicYearsResource.loading"
+      >
         <option :value="null">Select a Year</option>
         <option v-for="year in displayYears" :key="year" :value="year.original">
           {{ year.display }}
@@ -13,18 +57,28 @@
       </select>
 
       <h2 class="card-title">Class / Program</h2>
-      <select v-model="selectedClass" class="picker2" @change="onClassChange">
+      <select 
+        v-model="selectedClass" 
+        class="picker2" 
+        @change="onClassChange"
+        :disabled="!selectedYear || classesResource.loading"
+      >
         <option :value="null">Select a Class / Program</option>
-        <option v-for="cls in classes" :key="cls" :value="cls">
-          {{ cls }}
+        <option v-for="cls in classes" :key="cls.name" :value="cls.name">
+          {{ cls.name }}
         </option>
       </select>
 
       <h2 v-if="divisions.length > 0" class="card-title">Division / Student Group</h2>
-      <select v-if="divisions.length > 0" v-model="selectedDivision" class="picker2">
+      <select 
+        v-if="divisions.length > 0" 
+        v-model="selectedDivision" 
+        class="picker2"
+        :disabled="!selectedClass || divisionsResource.loading"
+      >
         <option :value="null">Select a Division / Student Group</option>
-        <option v-for="div in divisions" :key="div" :value="div">
-          {{ div }}
+        <option v-for="div in divisions" :key="div.name" :value="div.name">
+          {{ div.name }}
         </option>
       </select>
     </div>
@@ -46,15 +100,15 @@
       <button 
         class="button" 
         @click="handleEnrollStudents"
-        :disabled="isLoading || !selectedYear || !selectedClass || !selectedDivision || !fileSelected"
+        :disabled="enrollStudentsResource.loading || !selectedYear || !selectedClass || !selectedDivision || !fileSelected"
       >
-        <span v-if="isLoading" class="button-text">
+        <span v-if="enrollStudentsResource.loading" class="button-text">
           <span class="spinner"></span> Processing...
         </span>
         <span v-else class="button-text">Enroll Students ✅</span>
       </button>
 
-      <div v-if="message" :class="['message', message.type]">
+      <div v-if="message && !showResultMessage" :class="['message', message.type]">
         {{ message.text }}
       </div>
     </div>
@@ -112,121 +166,171 @@
 </template>
 
 <script>
-import { enrollStudents, getAcademicYears, getClasses, getDivisions2 } from "../utils/apiUtils";
+import { createResource } from 'frappe-ui';
+import { reactive, ref, computed, onMounted } from 'vue';
 import * as XLSX from "xlsx";
 
 export default {
-  data() {
-    return {
-      academicYears: [],
-      displayYears: [],
-      selectedYear: null,
-      classes: [],
-      divisions: [],
-      selectedClass: null,
-      selectedDivision: null,
-      mappings: [],
-      fileSelected: null,
-      studentsList: [],
-      options: ["First Name", "Middle Name", "Last Name", "Email Address", "Phone Number", "GR Number", "Roll No"],
-      isLoading: false,
-      message: null,
-      previewData: [],
-      previewHeaders: [],
-      editHistory: [],
-      pendingEdits: [],
-    };
-  },
-  created() {
-    this.fetchAcademicYears();
-    this.fetchClasses();
-    this.debouncedSendCellUpdate = this.debounce(this.sendCellUpdate, 500);
-  },
-  methods: {
-    async fetchAcademicYears() {
-      try {
-        const response = await getAcademicYears({ values: {} });
-        console.log('getAcademicYears API response:', response);
+  setup() {
+    // Reactive state
+    const academicYears = ref([]);
+    const displayYears = computed(() =>
+      academicYears.value.map((year, index) => ({
+        original: year,
+        display: index === 0 ? `${year} - Current Year` : year
+      }))
+    );
+    const selectedYear = ref(null);
+    const classes = ref([]);
+    const divisions = ref([]);
+    const selectedClass = ref(null);
+    const selectedDivision = ref(null);
+    const mappings = ref([]);
+    const fileSelected = ref(null);
+    const options = ref([
+      "First Name", 
+      "Middle Name", 
+      "Last Name", 
+      "Email Address", 
+      "Phone Number", 
+      "GR Number", 
+      "Roll No",
+      "Guardian Name",
+      "Guardian Number", 
+      "Guardian Email",  
+      "Relation",
+    ]);
+    const message = ref(null);
+    const previewData = ref([]);
+    const previewHeaders = ref([]);
+    const editHistory = ref([]);
+    const pendingEdits = ref([]);
+    
+    // New state for modal management
+    const showResultMessage = ref(false);
+    const submitSuccess = ref(false);
+    const errorMessage = ref('');
 
-        if (response && Array.isArray(response.message)) {
-          this.academicYears = response.message;
-          this.displayYears = this.academicYears.map((year, index) => ({
-            original: year,
-            display: index === 0 ? `${year} - Current Year` : year
-          }));
-          if (this.academicYears.length > 0) {
-            this.selectedYear = this.academicYears[0];
+    // API Resources
+    const academicYearsResource = createResource({
+      url: 'school.al_ummah.api3.get_academic_years',
+      params: { values: {} },
+      onSuccess: (data) => {
+        academicYears.value = Array.isArray(data) ? data : [];
+        if (academicYears.value.length > 0) {
+          selectedYear.value = academicYears.value[0];
+        }
+        if (!academicYears.value.length) {
+          showMessage('No academic years available', 'error');
+        }
+      },
+      onError: (err) => {
+        console.error('Error fetching academic years:', err);
+        academicYears.value = [];
+        showMessage(`Error fetching academic years: ${err.messages?.[0] || 'Unknown error'}`, 'error');
+      }
+    });
+
+    const classesResource = createResource({
+      url: 'school.al_ummah.api3.get_classes',
+      params: { values: {} },
+      onSuccess: (data) => {
+        classes.value = Array.isArray(data) ? data : [];
+        console.log('Classes loaded:', classes.value);
+        if (!classes.value.length) {
+          showMessage('No classes available', 'error');
+        }
+      },
+      onError: (err) => {
+        console.error('Error fetching classes:', err);
+        classes.value = [];
+        showMessage(`Error fetching classes: ${err.messages?.[0] || 'Unknown error'}`, 'error');
+      }
+    });
+
+    const divisionsResource = createResource({
+      url: 'school.al_ummah.api3.get_divisions2',
+      params: {
+        values: {
+          classId: selectedClass.value,
+          academicYear: selectedYear.value
+        }
+      },
+      onSuccess: (data) => {
+        divisions.value = Array.isArray(data) ? data : [];
+        console.log('Divisions loaded:', divisions.value);
+      },
+      onError: (err) => {
+        console.error('Error fetching divisions:', err);
+        divisions.value = [];
+        showMessage(`Error fetching divisions: ${err.messages?.[0] || 'Unknown error'}`, 'error');
+      }
+    });
+
+    const enrollStudentsResource = createResource({
+      url: 'school.al_ummah.api3.bulk_enroll_students',
+      params: {
+        academicYear: selectedYear.value,
+        className: selectedClass.value,
+        divisionName: selectedDivision.value,
+        students: [],
+        mappings: {}
+      },
+      onSuccess: () => {
+        submitSuccess.value = true;
+        errorMessage.value = '';
+        showResultMessage.value = true;
+        pendingEdits.value = [];
+      },
+      onError: (err) => {
+        console.error('Error enrolling students:', err);
+        submitSuccess.value = false;
+        errorMessage.value = err.messages?.[0] || 'Unexpected error during enrollment';
+        showResultMessage.value = true;
+      }
+    });
+
+    // Fetch initial data on mount
+    onMounted(() => {
+      academicYearsResource.reload();
+      classesResource.reload();
+    });
+
+    // Methods
+    function onYearChange() {
+      selectedClass.value = null;
+      selectedDivision.value = null;
+      divisions.value = [];
+      onClassChange();
+    }
+
+    function onClassChange() {
+      selectedDivision.value = null;
+      divisions.value = [];
+
+      if (selectedClass.value && selectedYear.value) {
+        divisionsResource.update({
+          params: {
+            values: {
+              classId: selectedClass.value,
+              academicYear: selectedYear.value
+            }
           }
-          console.log('Processed academic years:', this.academicYears);
-        } else {
-          this.academicYears = [];
-          this.displayYears = [];
-          console.warn('No valid academic years found in response');
-          this.showMessage("No academic years available", "error");
-        }
-      } catch (error) {
-        console.error("Error fetching academic years:", error);
-        this.academicYears = [];
-        this.displayYears = [];
-        this.showMessage("Error fetching academic years: " + (error.message || "Unknown error"), "error");
+        });
+        divisionsResource.reload();
       }
-    },
-    async fetchClasses() {
-      try {
-        const response = await getClasses({ values: {} });
-        console.log('getClasses API response:', response);
-        if (response && response.message && Array.isArray(response.message)) {
-          this.classes = response.message.map(cls => cls.name).filter(name => name);
-          console.log('Processed classes:', this.classes);
-        } else {
-          this.classes = [];
-          console.warn('No valid classes found in response');
-          this.showMessage("No classes available", "error");
-        }
-      } catch (error) {
-        console.error("Error fetching classes:", error);
-        this.classes = [];
-        this.showMessage("Error fetching classes: " + (error.message || "Unknown error"), "error");
-      }
-    },
-    async onYearChange() {
-      this.selectedClass = null;
-      this.selectedDivision = null;
-      this.divisions = [];
-      await this.onClassChange();
-    },
-    async onClassChange() {
-      this.selectedDivision = null;
-      this.divisions = [];
+    }
 
-      if (this.selectedClass && this.selectedYear) {
-        try {
-          const response = await getDivisions2({ 
-            values: { 
-              classId: this.selectedClass,
-              academicYear: this.selectedYear 
-            } 
-          });
-          console.log('getDivisions2 API response:', response);
-          this.divisions = response.message 
-            ? response.message.map(div => div.name).filter(name => name)
-            : [];
-          console.log(`Divisions for ${this.selectedClass} in ${this.selectedYear}:`, this.divisions);
-        } catch (error) {
-          console.error("Error fetching divisions:", error);
-          this.showMessage(`Error fetching divisions for ${this.selectedClass} in ${this.selectedYear}`, "error");
-        }
-      }
-    },
-    getExcelColumnLetter(index) {
+    function getExcelColumnLetter(index) {
       let letter = '';
       while (index >= 0) {
         letter = String.fromCharCode(65 + (index % 26)) + letter;
         index = Math.floor(index / 26) - 1;
       }
       return letter;
-    },
-    async handleFileSelection() {
+    }
+
+    async function handleFileSelection() {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.xlsx,.xls,.csv';
@@ -234,36 +338,38 @@ export default {
       input.onchange = async (e) => {
         const file = e.target.files[0];
         if (file) {
-          this.fileSelected = file;
-          this.showMessage(null);
+          fileSelected.value = file;
+          showMessage(null);
           try {
-            const { data, headers } = await this.readExcelFile(file);
-            this.previewData = data.slice(0, 100);
-            this.previewHeaders = headers;
+            const { data, headers } = await readExcelFile(file);
+            previewData.value = data.slice(0, 100);
+            previewHeaders.value = headers;
             // Initialize mappings for each column
-            this.mappings = headers.map((_, index) => ({
+            mappings.value = headers.map((_, index) => ({
               type: null,
               column: XLSX.utils.encode_col(index)
             }));
-            this.autoDetectMappings(headers);
+            autoDetectMappings(headers);
           } catch (error) {
             console.error("Error loading preview:", error);
-            this.showMessage("Error loading file preview", "error");
+            showMessage("Error loading file preview", "error");
           }
         }
       };
       input.click();
-    },
-    removeFile() {
-      this.fileSelected = null;
-      this.previewData = [];
-      this.previewHeaders = [];
-      this.mappings = [];
-      this.editHistory = [];
-      this.pendingEdits = [];
-      this.showMessage(null);
-    },
-    prepareStudentsData(data, editedRowIndex = null) {
+    }
+
+    function removeFile() {
+      fileSelected.value = null;
+      previewData.value = [];
+      previewHeaders.value = [];
+      mappings.value = [];
+      editHistory.value = [];
+      pendingEdits.value = [];
+      showMessage(null);
+    }
+
+    function prepareStudentsData(data, editedRowIndex = null) {
       let studentsData = data;
       if (editedRowIndex !== null) {
         studentsData = [data[editedRowIndex]];
@@ -278,14 +384,18 @@ export default {
           "Email Address": "",
           "Phone Number": "",
           "GR Number": "",
-          "Roll No": ""
+          "Roll No": "",
+          "Guardian Name": "",
+          "Guardian Number": "",
+          "Relation": "",
+          "Guardian Email": ""  // Add this line
         };
 
-        this.mappings.forEach(({ type, column }) => {
+        mappings.value.forEach(({ type, column }) => {
           if (type) {
             try {
               const columnIndex = XLSX.utils.decode_col(column);
-              const columnName = this.previewHeaders[columnIndex];
+              const columnName = previewHeaders.value[columnIndex];
               const value = row[columnName]?.toString().trim() || '';
               student[type] = value;
             } catch (error) {
@@ -301,110 +411,105 @@ export default {
       );
 
       return {
-        academicYear: this.selectedYear,
-        className: this.selectedClass,
-        divisionName: this.selectedDivision,
+        academicYear: selectedYear.value,
+        className: selectedClass.value,
+        divisionName: selectedDivision.value,
         students: filteredStudentsData,
-        ...this.options.reduce((acc, option) => {
-          const mapping = this.mappings.find(mapping => mapping.type === option);
+        ...options.value.reduce((acc, option) => {
+          const mapping = mappings.value.find(mapping => mapping.type === option);
           acc[option] = mapping ? mapping.column : "None";
           return acc;
         }, {}),
       };
-    },
-    async handleEnrollStudents() {
+    }
+
+    async function handleEnrollStudents() {
       console.log('Enroll button clicked');
 
       const requiredFields = ['First Name', 'GR Number', 'Last Name', 'Roll No'];
 
-      const mappedFields = this.mappings.map(m => m.type).filter(type => type);
+      const mappedFields = mappings.value.map(m => m.type).filter(type => type);
       const missingFields = requiredFields.filter(field => !mappedFields.includes(field));
 
       if (missingFields.length > 0) {
         const msg = `Please map the following required fields: ${missingFields.join(', ')}`;
         console.error(msg);
-        this.showMessage(msg, 'error');
+        showMessage(msg, 'error');
         return;
       }
 
-      const invalidMappings = this.mappings.filter(m => 
+      const invalidMappings = mappings.value.filter(m => 
         m.type && (!m.column || !/^[A-Z]+$/.test(m.column))
       );
 
       if (invalidMappings.length > 0) {
-        this.showMessage('Please check your column mappings - some are invalid', 'error');
+        showMessage('Please check your column mappings - some are invalid', 'error');
         return;
       }
 
-      if (!this.selectedYear || !this.selectedClass || !this.selectedDivision) {
+      if (!selectedYear.value || !selectedClass.value || !selectedDivision.value) {
         const msg = 'Please select an academic year, class, and division';
         console.error(msg);
-        this.showMessage(msg, 'error');
+        showMessage(msg, 'error');
         return;
       }
 
-      if (!this.fileSelected) {
+      if (!fileSelected.value) {
         const msg = 'Please select a file first';
         console.error(msg);
-        this.showMessage(msg, 'error');
+        showMessage(msg, 'error');
         return;
       }
 
-      this.isLoading = true;
-      this.showMessage(null);
-
-      try {
-        if (this.previewData.length === 0) {
-          throw new Error('No data available to enroll');
-        }
-
-        const params = this.prepareStudentsData(this.previewData);
-        console.log('Sending updated preview data to enrollStudents:', params);
-        const response = await enrollStudents(params);
-
-        if (response.success) {
-          this.showMessage('✅ Students enrolled successfully!', 'success');
-          this.pendingEdits = [];
-        } else {
-          this.showMessage(response.error || 'Failed to enroll students', 'error');
-          console.error('Enrollment error details:', {
-            error: response.error,
-            duplicates: response.duplicates,
-            message: response.message
-          });
-        }
-      } catch (error) {
-        console.error('Error enrolling students:', error);
-        this.showMessage(error.message || 'Unexpected error during enrollment', 'error');
-      } finally {
-        this.isLoading = false;
+      if (previewData.value.length === 0) {
+        showMessage('No data available to enroll', 'error');
+        return;
       }
-    },
-    autoDetectMappings(headers) {
-      const fieldPatterns = {
-        "First Name": ["first", "fname", "given"],
-        "Last Name": ["last", "lname", "surname"],
-        "Middle Name": ["middle", "mname"],
-        "Email Address": ["email", "mail"],
-        "Phone Number": ["phone", "mobile", "contact"],
-        "GR Number": ["gr", "grno", "gr_num"],
-        "Roll No": ["roll", "rollno", "roll_num"]
-      };
 
+      const params = prepareStudentsData(previewData.value);
+      console.log('Sending updated preview data to enrollStudents:', params);
+      
+      enrollStudentsResource.update({
+        params: {
+          academicYear: selectedYear.value,
+          className: selectedClass.value,
+          divisionName: selectedDivision.value,
+          students: params.students,
+          mappings: { ...params }
+        }
+      });
+      enrollStudentsResource.submit();
+    }
+
+    function autoDetectMappings(headers) {
+    const fieldPatterns = {
+      "First Name": ["first", "fname", "given"],
+      "Last Name": ["last", "lname", "surname"],
+      "Middle Name": ["middle", "mname"],
+      "Email Address": ["email", "mail"],
+      "Phone Number": ["phone", "mobile", "contact"],
+      "GR Number": ["gr", "grno", "gr_num"],
+      "Roll No": ["roll", "rollno", "roll_num"],
+      "Guardian Name": ["guardian", "parent", "father", "mother"],
+      "Guardian Number": ["guardian phone", "parent phone", "father phone", "mother phone", "guardian mobile"],
+      "Relation": ["relation", "relationship"],
+      "Guardian Email": ["guardian email", "parent email", "father email", "mother email"]  // Add this line
+    };
       headers.forEach((header, index) => {
         if (!header) return;
         const headerLower = header.toLowerCase();
         for (const [field, patterns] of Object.entries(fieldPatterns)) {
           if (patterns.some(pattern => headerLower.includes(pattern))) {
-            this.mappings[index].type = field;
+            mappings.value[index].type = field;
             break;
           }
         }
       });
 
-      console.log('Auto-detected mappings:', this.mappings);
-    },
-    async readExcelFile(file) {
+      console.log('Auto-detected mappings:', mappings.value);
+    }
+
+    function readExcelFile(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         
@@ -468,28 +573,32 @@ export default {
         reader.onerror = (error) => reject(error);
         reader.readAsArrayBuffer(file);
       });
-    },
-    updateMapping(index, key, value) {
-      this.$set(this.mappings, index, {
-        ...this.mappings[index],
+    }
+
+    function updateMapping(index, key, value) {
+      mappings.value[index] = {
+        ...mappings.value[index],
         [key]: value,
         column: XLSX.utils.encode_col(index)
-      });
-    },
-    deleteRow(rowIndex) {
-      this.previewData.splice(rowIndex, 1);
-      this.editHistory = this.editHistory.filter(edit => edit.rowIndex !== rowIndex);
-      this.pendingEdits = this.pendingEdits.filter(edit => edit.rowIndex !== rowIndex);
-      this.showMessage('Row deleted', 'success');
-    },
-    showMessage(text, type = "info") {
-      this.message = text ? { text, type } : null;
+      };
+    }
+
+    function deleteRow(rowIndex) {
+      previewData.value.splice(rowIndex, 1);
+      editHistory.value = editHistory.value.filter(edit => edit.rowIndex !== rowIndex);
+      pendingEdits.value = pendingEdits.value.filter(edit => edit.rowIndex !== rowIndex);
+      showMessage('Row deleted', 'success');
+    }
+
+    function showMessage(text, type = "info") {
+      message.value = text ? { text, type } : null;
       if (text && type !== "error" && type !== "success") {
-        setTimeout(() => this.showMessage(null), 5000);
+        setTimeout(() => showMessage(null), 5000);
       }
-    },
-    handleCellEdit(rowIndex, header, newValue) {
-      const row = this.previewData[rowIndex];
+    }
+
+    function handleCellEdit(rowIndex, header, newValue) {
+      const row = previewData.value[rowIndex];
       const oldValue = row[header] || '';
 
       if (oldValue !== newValue) {
@@ -500,58 +609,100 @@ export default {
           newValue,
           timestamp: new Date().toISOString(),
         };
-        this.editHistory.push(edit);
-        this.pendingEdits.push(edit);
+        editHistory.value.push(edit);
+        pendingEdits.value.push(edit);
         console.log('Cell edit recorded:', edit);
-        this.debouncedSendCellUpdate();
+        debouncedSendCellUpdate();
       }
-    },
-    debounce(fn, wait) {
+    }
+
+    function debounce(fn, wait) {
       let timeout;
       return function (...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn.apply(this, args), wait);
       };
-    },
-    async sendCellUpdate() {
-      if (this.pendingEdits.length === 0) return;
+    }
 
-      this.isLoading = true;
+    const debouncedSendCellUpdate = debounce(sendCellUpdate, 500);
+
+    async function sendCellUpdate() {
+      if (pendingEdits.value.length === 0) return;
+
       try {
-        const lastEdit = this.pendingEdits[this.pendingEdits.length - 1];
-        const params = this.prepareStudentsData(this.previewData, lastEdit.rowIndex);
+        const lastEdit = pendingEdits.value[pendingEdits.value.length - 1];
+        const params = prepareStudentsData(previewData.value, lastEdit.rowIndex);
         console.log('Sending cell update via enrollStudents:', params);
-        const result = await enrollStudents(params);
-
-        if (result.success) {
-          this.showMessage('Cell update saved successfully', 'success');
-          this.pendingEdits = [];
-        } else {
-          this.showMessage(result.error || 'Failed to save cell update', 'error');
-        }
+        
+        enrollStudentsResource.update({
+          params: {
+            academicYear: selectedYear.value,
+            className: selectedClass.value,
+            divisionName: selectedDivision.value,
+            students: params.students,
+            mappings: { ...params }
+          }
+        });
+        enrollStudentsResource.submit();
       } catch (error) {
         console.error('Error sending cell update:', error);
-        this.showMessage(`Failed to save cell update: ${error.message || 'Unknown error'}`, 'error');
-      } finally {
-        this.isLoading = false;
+        showMessage(`Failed to save cell update: ${error.message || 'Unknown error'}`, 'error');
       }
-    },
-    undoLastEdit() {
-      const lastEdit = this.editHistory.pop();
+    }
+
+    function undoLastEdit() {
+      const lastEdit = editHistory.value.pop();
       if (lastEdit) {
         const { rowIndex, column, oldValue } = lastEdit;
-        this.previewData[rowIndex][column] = oldValue;
-        this.pendingEdits = this.pendingEdits.filter(edit => edit !== lastEdit);
-        this.showMessage('Last edit undone', 'success');
+        previewData.value[rowIndex][column] = oldValue;
+        pendingEdits.value = pendingEdits.value.filter(edit => edit !== lastEdit);
+        showMessage('Last edit undone', 'success');
       } else {
-        this.showMessage('No edits to undo', 'info');
+        showMessage('No edits to undo', 'info');
       }
-    },
-  },
+    }
+
+    return {
+      academicYears,
+      displayYears,
+      selectedYear,
+      classes,
+      divisions,
+      selectedClass,
+      selectedDivision,
+      mappings,
+      fileSelected,
+      options,
+      message,
+      previewData,
+      previewHeaders,
+      editHistory,
+      pendingEdits,
+      academicYearsResource,
+      classesResource,
+      divisionsResource,
+      enrollStudentsResource,
+      showResultMessage,
+      submitSuccess,
+      errorMessage,
+      onYearChange,
+      onClassChange,
+      getExcelColumnLetter,
+      handleFileSelection,
+      removeFile,
+      handleEnrollStudents,
+      updateMapping,
+      deleteRow,
+      showMessage,
+      handleCellEdit,
+      undoLastEdit
+    };
+  }
 };
 </script>
 
 <style scoped>
+/* Your existing CSS styles remain the same */
 .table-select {
   width: 100%;
   padding: 5px;

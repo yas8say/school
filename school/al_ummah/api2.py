@@ -895,37 +895,38 @@ def get_student_info():
 
 @frappe.whitelist()
 def get_guardian_app_data(guardian_id):
-    guardian_doc = frappe.get_doc("Guardian", {"email_address": guardian_id})
-    print(guardian_doc)
+    guardian = frappe.get_all("Guardian", filters={"user": guardian_id}, limit=1)
+    print("Found Guardian doc:", guardian)
 
-    # Retrieve students linked to this guardian and convert them to dictionaries
-    student_list = [student.as_dict() for student in guardian_doc.get("students")]  # Convert to dicts
+    if not guardian:
+        frappe.throw(f"No Guardian found for user: {guardian_id}")
 
-    # Now you can modify student_list freely
+    # Use the name from the query
+    guardian_doc = frappe.get_doc("Guardian", guardian[0].name)
+
+    # Retrieve students linked to this guardian
+    student_list = [student.as_dict() for student in guardian_doc.get("students")]
+
+    # Process each student
     for student in student_list:
-        current_program = get_current_enrollment(student["student"])  # Accessing as dict
+        current_program = get_current_enrollment(student["student"])
         student_groups = get_student_groups(student["student"], current_program.program)
 
         if not student_groups:
-            frappe.throw("Student group not found")
+            frappe.throw(f"Student group not found for {student['student']}")
 
         student_group = student_groups[0]["label"]
-        print(student)
-        student["student_group"] = student_group  # Add student_group to the dict
-
-    if not student_list:
-        frappe.throw(f"No students found for Guardian ID: {guardian_id}")
+        student["student_group"] = student_group
 
     profile = guardian_doc.image
-
-    # Convert the profile image to base64 if available
     base64image = convert_image_to_base64(profile) if profile else None
-    print(student_list)
+
     response = {
         "name": guardian_doc.guardian_name,
         "base64profile": base64image,
         "student_list": student_list,
     }
+
     print(response)
     return response
 
@@ -1029,24 +1030,34 @@ def get_student_app_data(studentID):
     return response
 
 
+ROLE_MAPPING = {
+    "parent": "Guardian",
+    "teacher": "Instructor"
+}
+
 @frappe.whitelist()
 def get_user_details(username, role):
-    if frappe.session.user:
-        print(frappe.session.user)
-        roles = frappe.get_roles(username)
-        print(roles, role)
-        user_details = None
-        if "Instructor" in roles and role == "teacher":
+    if not frappe.session.user:
+        return {"error": "User not logged in"}
+
+    print(frappe.session.user)
+    roles = frappe.get_roles(username)
+    print(roles, role)
+
+    mapped_role = ROLE_MAPPING.get(role, role)  # map frontend role to Frappe role
+    user_details = None
+
+    if mapped_role in roles:
+        if mapped_role == "Instructor":
             user_details = get_instructor_app_data(username)
             print("hello")
-        if "Guardian" in roles and role == "parent":
+        elif mapped_role == "Guardian":
             user_details = get_guardian_app_data(username)
             print("olleh")
-        
-        print(user_details)
-        return {"roles": roles, "user_details": user_details}
-    else:
-        return {"error": "User not logged in"}
+
+    print(user_details)
+    return {"roles": roles, "user_details": user_details}
+
 
 # @frappe.whitelist()
 # def get_guardian_app_data(guardian_id):
@@ -1698,7 +1709,7 @@ def add_guardian_to_student(student_id, student_name, guardian_name, relation, p
             guardian_name = frappe.db.get_value("Guardian", {"name": existing_guardian}, "guardian_name")
         else:
             guardian_email = generate_unique_email(guardian_name)
-            print
+            
             user_doc = frappe.get_doc({
                 "doctype": "User",
                 "mobile_no": phone_number,
