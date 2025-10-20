@@ -13,13 +13,13 @@
     <div v-if="showResultMessage" class="modal-overlay">
       <div class="result-modal">
         <div v-if="submitSuccess" class="success-icon">
-          <svg class="icon" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <div v-else class="error-icon">
-          <svg class="icon" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </div>
         <h3 class="result-title">
@@ -107,16 +107,18 @@
             <span class="error-message" v-if="errors.gender">{{ errors.gender }}</span>
           </div>
           
-          <div class="form-group required">
-            <label>Date of Birth</label>
-            <input 
-              v-model="teacherData.dob" 
-              type="date" 
-              class="input"
-              required
-            >
-            <span class="error-message" v-if="errors.dob">{{ errors.dob }}</span>
-          </div>
+        <div class="form-group required">
+          <label>Date of Birth</label>
+          <input 
+            v-model="teacherData.dob" 
+            type="date" 
+            class="input"
+            :max="getTodayDate()"
+            required
+          >
+          <span class="error-message" v-if="errors.dob">{{ errors.dob }}</span>
+        </div>
+
         </div>
       </div>
 
@@ -187,14 +189,20 @@
             <span class="error-message" v-if="errors.divisionName">{{ errors.divisionName }}</span>
           </div>
           
-          <div class="form-group">
+          <!-- <div class="form-group">
             <label>Designation</label>
             <input v-model="teacherData.designation" class="input" placeholder="Enter designation">
-          </div>
+          </div> -->
           
-          <div class="form-group">
+          <div class="form-group required">
             <label>Date of Joining</label>
-            <input v-model="teacherData.doj" type="date" class="input">
+            <input 
+              v-model="teacherData.doj" 
+              type="date" 
+              class="input"
+              required
+            >
+            <span class="error-message" v-if="errors.doj">{{ errors.doj }}</span>
           </div>
           
           <div class="form-group">
@@ -284,7 +292,7 @@ export default {
       bankName: "",
       accountNumber: "",
       ifscCode: "",
-      designation: "",
+      // designation: "",
       address: "",
       className: null,
       divisionName: null,
@@ -349,7 +357,7 @@ export default {
           "Bank Name": teacherData.bankName,
           "Bank A/C No.": teacherData.accountNumber,
           "IFSC Code": teacherData.ifscCode,
-          "Designation": teacherData.designation,
+          // "Designation": teacherData.designation,
           "Current Address": teacherData.address,
           "Class": teacherData.className || "",
           "Division": teacherData.divisionName || "",
@@ -364,7 +372,7 @@ export default {
         if (response && response.message) {
           successMessage.value = response.message;
         } else {
-          successMessage.value = `Teacher ${teacherData.firstName} ${teacherData.lastName} has been successfully enrolled${teacherData.designation ? ` as ${teacherData.designation}` : ''}.`;
+          successMessage.value = `Teacher ${teacherData.firstName} ${teacherData.lastName} has been successfully enrolled.`;
         }
         
         showResultMessage.value = true;
@@ -424,8 +432,21 @@ export default {
         isValid = false;
       }
       
+      // Date of Birth is now required
       if (!teacherData.dob) {
         errors.dob = "Date of birth is required";
+        isValid = false;
+      } else if (!validDate(teacherData.dob)) {
+        errors.dob = "Date of birth cannot be in the future";
+        isValid = false;
+      }
+      
+      // Date of Joining is now required
+      if (!teacherData.doj) {
+        errors.doj = "Date of joining is required";
+        isValid = false;
+      } else if (!validDate(teacherData.doj)) {
+        errors.doj = "Date of joining cannot be in the future";
         isValid = false;
       }
       
@@ -458,6 +479,23 @@ export default {
       return re.test(mobile);
     }
 
+    function validDate(dateString) {
+      const inputDate = new Date(dateString);
+      const today = new Date();
+      // Set both dates to start of day for accurate comparison
+      today.setHours(0, 0, 0, 0);
+      inputDate.setHours(0, 0, 0, 0);
+      return inputDate <= today;
+    }
+
+    function getTodayDate() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
     function validateAndSubmit() {
       if (validateForm()) {
         submitForm();
@@ -481,7 +519,7 @@ export default {
             "Bank Name": teacherData.bankName,
             "Bank A/C No.": teacherData.accountNumber,
             "IFSC Code": teacherData.ifscCode,
-            "Designation": teacherData.designation,
+            // "Designation": teacherData.designation,
             "Current Address": teacherData.address,
             "Class": teacherData.className || "",
             "Division": teacherData.divisionName || "",
@@ -506,7 +544,7 @@ export default {
         bankName: "",
         accountNumber: "",
         ifscCode: "",
-        designation: "",
+        // designation: "",
         address: "",
         className: null,
         divisionName: null,
@@ -547,7 +585,8 @@ export default {
       onClassChange,
       validateAndSubmit,
       resetForm,
-      resetAndClose
+      resetAndClose,
+      getTodayDate // Make this available to the template
     };
   }
 };

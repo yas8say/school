@@ -38,46 +38,19 @@
             {{ message.text }}
           </div>
 
-          <!-- Enrollment Summary -->
-          <div v-if="enrollmentSummary.total_processed > 0" class="summary-section">
-            <h4 class="section-title">Enrollment Summary</h4>
-            <div class="summary-stats">
-              <div class="stat-item">
-                <span class="stat-label">Total Processed</span>
-                <span class="stat-value">{{ enrollmentSummary.total_processed }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Successful</span>
-                <span class="stat-value valid">{{ enrollmentSummary.successful }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Failed</span>
-                <span class="stat-value warning">{{ enrollmentSummary.failed }}</span>
-              </div>
+          <!-- Detailed Errors Display -->
+          <div v-if="detailedErrors.length > 0" class="error-details">
+            <h4 class="section-title">Enrollment Errors ({{ detailedErrors.length }}):</h4>
+            <div v-for="(error, index) in detailedErrors" :key="index" class="error-message">
+              ❌ {{ error }}
             </div>
           </div>
 
-          <!-- Success Results -->
-          <div v-if="enrolledTeachers.length > 0" class="success-details">
-            <h4 class="section-title">Successfully Enrolled ({{ enrolledTeachers.length }})</h4>
-            <div class="results-list">
-              <div v-for="(teacher, index) in enrolledTeachers" :key="index" class="success-message">
-                ✅ {{ teacher }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Error Results -->
-          <div v-if="failedEnrollments.length > 0" class="error-details">
-            <h4 class="section-title">Enrollment Errors ({{ failedEnrollments.length }})</h4>
-            <div class="results-list">
-              <div v-for="(failure, index) in failedEnrollments" :key="index" class="error-message">
-                <div class="error-student">
-                  <strong>{{ failure.instructor_data['First Name'] }} {{ failure.instructor_data['Middle Name'] }} {{ failure.instructor_data['Last Name'] }}</strong>
-                  <span class="student-details">(Email: {{ failure.instructor_data['Email'] }}, Mobile: {{ failure.instructor_data['Mobile'] }})</span>
-                </div>
-                <div class="error-text">❌ {{ failure.error }}</div>
-              </div>
+          <!-- Success Results Display -->
+          <div v-if="successResults.length > 0" class="success-details">
+            <h4 class="section-title">Successfully Enrolled ({{ successResults.length }}):</h4>
+            <div v-for="(result, index) in successResults" :key="index" class="success-message">
+              ✅ {{ result }}
             </div>
           </div>
         </div>
@@ -118,7 +91,7 @@
                 <thead>
                   <tr>
                     <th class="actions">Actions</th>
-                    <th class="status-cell">Status</th>
+                    <th class="status-cell">Status</th> <!-- Add class here -->
                     <th>Class/Program <span class="optional">(Optional)</span></th>
                     <th>Division/Student Group <span class="optional">(Optional)</span></th>
                     <th v-for="(_, index) in previewHeaders" :key="'letter-'+index">
@@ -127,7 +100,7 @@
                   </tr>
                   <tr>
                     <th class="actions"></th>
-                    <th class="status-cell"></th>
+                    <th class="status-cell"></th> <!-- Add class here too -->
                     <th>Class/Program</th>
                     <th>Division/Student Group</th>
                     <th v-for="(header, index) in previewHeaders" :key="'header-'+index">
@@ -257,14 +230,14 @@
 import { createResource } from 'frappe-ui';
 import { reactive, ref, onMounted, computed } from 'vue';
 import * as XLSX from "xlsx";
-import '@/styles/form.css';
+import '@/styles/form.css'; // Import external CSS
 import { 
   parseDate, 
   formatDateForAPI, 
   validateDateField, 
   validDate, 
   getTodayDate 
-} from '@/utils/dateUtils';
+} from '@/utils/dateUtils'; // Import date utilities
 
 export default {
   setup() {
@@ -298,15 +271,8 @@ export default {
     const classes = ref([]);
     const editHistory = ref([]);
     const pendingEdits = ref([]);
-    
-    // Enhanced state for better error handling
-    const enrolledTeachers = ref([]);
-    const failedEnrollments = ref([]);
-    const enrollmentSummary = ref({
-      total_processed: 0,
-      successful: 0,
-      failed: 0
-    });
+    const detailedErrors = ref([]);
+    const successResults = ref([]);
     const processing = ref(false);
     const showResultModal = ref(false);
     const resultModalType = ref('success');
@@ -328,7 +294,7 @@ export default {
 
     // API Resources
     const classesResource = createResource({
-      url: 'school.al_ummah.api4.get_classes',
+      url: 'school.al_ummah.api3.get_classes',
       params: { values: {} },
       onSuccess: (data) => {
         classes.value = Array.isArray(data) ? data : [];
@@ -345,7 +311,7 @@ export default {
     });
 
     const divisionsResource = createResource({
-      url: 'school.al_ummah.api4.get_divisions1',
+      url: 'school.al_ummah.api3.get_divisions1',
       params: {
         values: {
           classId: '' // Will be updated dynamically
@@ -362,44 +328,24 @@ export default {
     });
 
     const enrollTeachersResource = createResource({
-      url: 'school.al_ummah.api4.bulk_enroll_instructors',
-      method: 'POST',
+      url: 'school.al_ummah.api3.bulk_enroll_instructors',
+      params: {
+        teachers: [],
+        mappings: {}
+      },
       onSuccess: (data) => {
-        console.log('Bulk enrollment successful:', data);
-        processing.value = false;
-        
-        if (data && data.success) {
-          // Update enrollment results
-          enrolledTeachers.value = data.enrolled_instructors || [];
-          failedEnrollments.value = data.failed_enrollments || [];
-          enrollmentSummary.value = data.summary || {
-            total_processed: data.enrolled_instructors.length + data.failed_enrollments.length,
-            successful: data.enrolled_instructors.length,
-            failed: data.failed_enrollments.length
-          };
-          
-          // Update row statuses based on bulk response
-          updateRowStatusesFromBulkResponse(data.enrolled_instructors, data.failed_enrollments);
-          
-          // Show appropriate message and modal
-          if (failedEnrollments.value.length === 0) {
-            showMessage(`✅ Successfully enrolled all ${enrolledTeachers.value.length} teachers!`, 'success');
-            showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${enrolledTeachers.value.length} teachers!`);
-          } else {
-            showMessage(`Completed: ${enrolledTeachers.value.length} successful, ${failedEnrollments.value.length} failed.`, 'warning');
-            showResultModalFunc('warning', 'Enrollment Completed with Errors', 
-              `Completed with ${enrolledTeachers.value.length} successful enrollments and ${failedEnrollments.value.length} failures.`);
-          }
-        } else {
-          showMessage('Bulk enrollment completed with issues', 'warning');
-        }
+        showMessage('✅ Teachers enrollment process completed!', 'success');
+        pendingEdits.value = [];
       },
       onError: (err) => {
-        console.error('Error in bulk enrollment:', err);
-        processing.value = false;
-        showMessage(`Bulk enrollment failed: ${err.messages?.[0] || err.message || 'Unknown error'}`, 'error');
-        showResultModalFunc('error', 'Bulk Enrollment Failed', err.messages?.[0] || err.message || 'Unknown error occurred during bulk enrollment.');
+        console.error('Error enrolling teachers:', err);
       }
+    });
+
+    // Single enrollment resource
+    const singleEnrollResource = createResource({
+      url: 'school.al_ummah.api3.enroll_single_instructor',
+      method: 'POST'
     });
 
     // Fetch initial data on mount
@@ -452,9 +398,8 @@ export default {
         if (file) {
           fileSelected.value = file;
           showMessage(null);
-          enrolledTeachers.value = [];
-          failedEnrollments.value = [];
-          enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+          detailedErrors.value = [];
+          successResults.value = [];
           try {
             const { data, headers } = await readExcelFile(file);
             previewData.value = data.slice(0, 100).map(row => ({
@@ -524,14 +469,13 @@ export default {
       mappings.value = [];
       editHistory.value = [];
       pendingEdits.value = [];
-      enrolledTeachers.value = [];
-      failedEnrollments.value = [];
-      enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+      detailedErrors.value = [];
+      successResults.value = [];
       showMessage(null);
     }
 
     function isRowValid(row) {
-      // Required fields
+      // Required fields (NOW INCLUDING Date of Birth and Date of Joining)
       const requiredFields = [
         'Mobile', 
         'Email', 
@@ -539,8 +483,8 @@ export default {
         'First Name', 
         'Last Name', 
         "Attendance Device ID (Biometric/RF tag ID)",
-        "Date of Birth",
-        "Date of Joining"
+        "Date of Birth",  // Added as required
+        "Date of Joining" // Added as required
       ];
       
       // Check if all required fields are mapped
@@ -581,11 +525,13 @@ export default {
             break;
             
           case 'Date of Birth':
+            // Date of Birth is now required - always validate
             const dobValidation = validateDateField(value, 'Date of Birth');
             if (!dobValidation.isValid) return false;
             break;
             
           case 'Date of Joining':
+            // Date of Joining is now required - always validate
             const dojValidation = validateDateField(value, 'Date of Joining');
             if (!dojValidation.isValid) return false;
             break;
@@ -649,6 +595,7 @@ export default {
             if (type === 'Date of Birth' || type === 'Date of Joining') {
               const parsedDate = parseDate(value);
               value = parsedDate ? formatDateForAPI(parsedDate) : '';
+              // Only format if date is valid, otherwise keep empty
             }
             
             teacher[type] = value;
@@ -661,56 +608,45 @@ export default {
       return teacher;
     }
 
-    function updateRowStatusesFromBulkResponse(enrolledTeachers, failedEnrollments) {
-      console.log('Updating row statuses from bulk response...');
-      console.log('Enrolled teachers:', enrolledTeachers);
-      console.log('Failed enrollments:', failedEnrollments);
+    async function enrollSingleTeacher(teacher, rowIndex, teacherName) {
+      try {
+        // Use utility functions for validation
+        // Date of Birth is now REQUIRED - always validate
+        if (!teacher['Date of Birth'] || teacher['Date of Birth'].toString().trim() === '') {
+          throw new Error('Date of Birth is required');
+        }
+        const dobValidation = validateDateField(teacher['Date of Birth'], 'Date of Birth');
+        if (!dobValidation.isValid) throw new Error(dobValidation.error);
 
-      // Reset all statuses first
-      previewData.value.forEach(row => {
-        row._status = null;
-        row._error = null;
-      });
+        // Date of Joining is now REQUIRED - always validate
+        if (!teacher['Date of Joining'] || teacher['Date of Joining'].toString().trim() === '') {
+          throw new Error('Date of Joining is required');
+        }
+        const dojValidation = validateDateField(teacher['Date of Joining'], 'Date of Joining');
+        if (!dojValidation.isValid) throw new Error(dojValidation.error);
 
-      // Update successful enrollments
-      enrolledTeachers.forEach(teacherName => {
-        console.log('Looking for successful teacher:', teacherName);
-        const rowIndex = findRowIndexByTeacherName(teacherName);
-        if (rowIndex !== -1) {
-          console.log(`✅ Marking row ${rowIndex} as success for teacher: ${teacherName}`);
+        const result = await singleEnrollResource.submit({
+          teacher: teacher
+        });
+
+        if (rowIndex !== undefined && previewData.value[rowIndex]) {
           previewData.value[rowIndex]._status = 'success';
           previewData.value[rowIndex]._error = null;
-        } else {
-          console.log(`❌ Could not find row for successful teacher: ${teacherName}`);
         }
-      });
-
-      // Update failed enrollments
-      failedEnrollments.forEach(failure => {
-        const rowIndex = findRowIndexByTeacherData(failure.instructor_data);
-        if (rowIndex !== -1) {
-          console.log(`❌ Marking row ${rowIndex} as error for teacher:`, failure.instructor_data['First Name']);
+        successResults.value.push(`Enrolled: ${teacherName}`);
+        return { success: true, teacherName };
+      } catch (error) {
+        console.error(`Error enrolling ${teacherName}:`, error);
+        
+        if (rowIndex !== undefined && previewData.value[rowIndex]) {
           previewData.value[rowIndex]._status = 'error';
-          previewData.value[rowIndex]._error = failure.error || 'Unknown error';
+          previewData.value[rowIndex]._error = error.messages?.[0] || error.message || 'Unknown error';
         }
-      });
-    }
-
-    function findRowIndexByTeacherName(teacherName) {
-      return previewData.value.findIndex(row => {
-        const rowTeacherData = prepareTeacherData(row);
-        const rowFullName = `${rowTeacherData['First Name']} ${rowTeacherData['Middle Name']} ${rowTeacherData['Last Name']}`.trim();
-        return rowFullName === teacherName;
-      });
-    }
-
-    function findRowIndexByTeacherData(teacherData) {
-      return previewData.value.findIndex(row => {
-        const rowTeacherData = prepareTeacherData(row);
-        return rowTeacherData['Email'] === teacherData['Email'] && 
-               rowTeacherData['First Name'] === teacherData['First Name'] &&
-               rowTeacherData['Last Name'] === teacherData['Last Name'];
-      });
+        
+        const errorMessage = `${teacherName}: ${error.messages?.[0] || error.message || 'Unknown error'}`;
+        detailedErrors.value.push(errorMessage);
+        return { success: false, teacherName, error: errorMessage };
+      }
     }
 
     function showResultModalFunc(type, title, description) {
@@ -727,13 +663,13 @@ export default {
       resultModalDescription.value = '';
     }
 
+
     async function handleEnrollTeachers() {
       console.log('Enroll button clicked');
 
       // Reset previous results
-      enrolledTeachers.value = [];
-      failedEnrollments.value = [];
-      enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+      detailedErrors.value = [];
+      successResults.value = [];
       processing.value = true;
       
       // Reset row statuses
@@ -742,7 +678,7 @@ export default {
         row._error = null;
       });
 
-      // Define required fields
+      // Define required fields (NOW INCLUDING Date of Birth and Date of Joining)
       const requiredFields = [
         'Mobile', 
         'Email', 
@@ -750,8 +686,8 @@ export default {
         'First Name', 
         'Last Name', 
         "Attendance Device ID (Biometric/RF tag ID)",
-        "Date of Birth",
-        "Date of Joining"
+        "Date of Birth",  // Added as required
+        "Date of Joining" // Added as required
       ];
 
       // Check if all required fields are mapped
@@ -785,12 +721,12 @@ export default {
       const invalidDateRows = previewData.value.filter(row => {
         const teacher = prepareTeacherData(row);
         
-        // Date of Birth validation
+        // Date of Birth is now required
         const dobValidation = teacher['Date of Birth'] && teacher['Date of Birth'].toString().trim() !== '' 
           ? validateDateField(teacher['Date of Birth'], 'Date of Birth')
           : { isValid: false, error: 'Date of Birth is required' };
           
-        // Date of Joining validation
+        // Date of Joining is now required
         const dojValidation = teacher['Date of Joining'] && teacher['Date of Joining'].toString().trim() !== ''
           ? validateDateField(teacher['Date of Joining'], 'Date of Joining')
           : { isValid: false, error: 'Date of Joining is required' };
@@ -843,39 +779,52 @@ export default {
       }
 
       try {
-        showMessage('Starting bulk enrollment process...', 'info');
+        showMessage('Starting enrollment process...', 'info');
         
         // Process all valid rows
         const validRows = previewData.value.filter(row => isRowValid(row));
         
         if (validRows.length === 0) {
-          showMessage('No valid rows to enroll. Please check your data and mappings.', 'warning');
+          showMessage('No valid rows to enroll. Please check your data.', 'warning');
           processing.value = false;
           return;
         }
 
-        console.log(`Starting bulk enrollment for ${validRows.length} teachers...`);
+        console.log(`Starting enrollment for ${validRows.length} teachers...`);
         
-        // Prepare teachers data for bulk enrollment
-        const teachersData = validRows.map(row => {
+        for (let i = 0; i < validRows.length; i++) {
+          const row = validRows[i];
+          const rowIndex = previewData.value.indexOf(row);
           const teacher = prepareTeacherData(row);
-          return teacher;
-        });
-
-        // Perform bulk enrollment
-        await enrollTeachersResource.submit({
-          teachers: teachersData,
-          mappings: Object.fromEntries(
-            mappings.value
-              .filter(mapping => mapping.type)
-              .map(mapping => [mapping.type, mapping.column])
-          )
-        });
-
+          const teacherName = `${teacher['First Name']} ${teacher['Last Name']}`.trim() || `Teacher ${i + 1}`;
+          
+          console.log(`Enrolling teacher ${i + 1}/${validRows.length}:`, teacherName);
+          
+          // Enroll single teacher
+          await enrollSingleTeacher(teacher, rowIndex, teacherName);
+          
+          // Small delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        // Show final summary
+        if (detailedErrors.value.length === 0) {
+          showMessage(`✅ Successfully enrolled all ${successResults.value.length} teachers!`, 'success');
+          showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${successResults.value.length} teachers!`);
+        } else if (successResults.value.length === 0) {
+          showMessage(`❌ All enrollments failed. Please check the errors below.`, 'error');
+          showResultModalFunc('error', 'Enrollment Failed', 'All enrollments failed. Please check the error details below.');
+        } else {
+          showMessage(`Completed: ${successResults.value.length} successful, ${detailedErrors.value.length} failed.`, 'warning');
+          showResultModalFunc('warning', 'Enrollment Completed with Errors', 
+            `Completed with ${successResults.value.length} successful enrollments and ${detailedErrors.value.length} failures.`);
+        }
+        
       } catch (error) {
-        console.error('Bulk enrollment process error:', error);
-        showMessage(`Bulk enrollment process failed: ${error.message || 'Unknown error'}`, 'error');
-        showResultModalFunc('error', 'Bulk Enrollment Process Failed', error.message || 'Unknown error occurred during enrollment.');
+        console.error('Enrollment process error:', error);
+        showMessage(`Enrollment process failed: ${error.message || 'Unknown error'}`, 'error');
+        showResultModalFunc('error', 'Enrollment Process Failed', error.message || 'Unknown error occurred during enrollment.');
+      } finally {
         processing.value = false;
       }
     }
@@ -1005,18 +954,8 @@ export default {
         const row = previewData.value[lastEdit.rowIndex];
         const teacher = prepareTeacherData(row);
         
-        // Use bulk enrollment with single teacher for updates
-        await enrollTeachersResource.submit({
-          teachers: [teacher],
-          mappings: Object.fromEntries(
-            mappings.value
-              .filter(mapping => mapping.type)
-              .map(mapping => [mapping.type, mapping.column])
-          )
-        });
-        
-        // Clear pending edits on success
-        pendingEdits.value = [];
+        // Use the single enrollment function for individual updates
+        await enrollSingleTeacher(teacher, lastEdit.rowIndex, `${teacher['First Name']} ${teacher['Last Name']}`);
         
       } catch (error) {
         console.error('Error sending cell update:', error);
@@ -1034,9 +973,8 @@ export default {
       classes,
       editHistory,
       pendingEdits,
-      enrolledTeachers,
-      failedEnrollments,
-      enrollmentSummary,
+      detailedErrors,
+      successResults,
       processing,
       showResultModal,
       resultModalType,

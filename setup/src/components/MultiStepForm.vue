@@ -3,6 +3,32 @@
     <div v-if="currentStep < steps.length">
       <h2 class="text-2xl font-semibold mb-6">{{ steps[currentStep].title }}</h2>
 
+      <!-- Missing Fields Alert -->
+      <div v-if="missingFields.length > 0 && showMissingFields" class="missing-fields-alert">
+        <div class="alert-header">
+          <div class="alert-icon">
+            <svg class="icon" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" />
+            </svg>
+          </div>
+          <h3 class="alert-title">Required Information Missing</h3>
+          <button @click="showMissingFields = false" class="close-button">
+            <svg class="close-icon" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+            </svg>
+          </button>
+        </div>
+        <div class="alert-content">
+          <p class="alert-description">Please fill in the following required fields before proceeding:</p>
+          <ul class="missing-fields-list">
+            <li v-for="(field, index) in missingFields" :key="index" class="missing-field-item">
+              <span class="field-bullet">•</span>
+              {{ field }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <component
         :is="steps[currentStep].component"
         :values="formValues"
@@ -105,6 +131,8 @@ export default {
     const showResultMessage = ref(false);
     const submitSuccess = ref(false);
     const errorMessage = ref('');
+    const missingFields = ref([]);
+    const showMissingFields = ref(false);
 
     const formValues = reactive({
       email: '',
@@ -301,6 +329,7 @@ export default {
     function nextStep() {
       if (currentStep.value < steps.value.length - 1) {
         currentStep.value++;
+        showMissingFields.value = false;
       } else {
         submitForm();
       }
@@ -309,6 +338,7 @@ export default {
     function prevStep() {
       if (currentStep.value > 0) {
         currentStep.value--;
+        showMissingFields.value = false;
       }
     }
 
@@ -317,13 +347,18 @@ export default {
       showResultMessage.value = false;
       submitSuccess.value = false;
       errorMessage.value = '';
+      showMissingFields.value = false;
 
       const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes'];
-      const missingFields = checkMissingFields(formValues, exceptions);
+      const missing = checkMissingFields(formValues, exceptions);
 
-      if (missingFields.length > 0) {
-        alert(`Please fill in the following fields:\n - ${missingFields.join('\n- ')}`);
+      if (missing.length > 0) {
+        missingFields.value = missing;
+        showMissingFields.value = true;
         isSubmitting.value = false;
+        
+        // Scroll to top to show the alert
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -343,14 +378,39 @@ export default {
 
         if (Array.isArray(value)) {
           if (value.length === 0) {
-            missingFields.push(`The list of ${key} is empty`);
+            // Format the field name for better display
+            const formattedField = formatFieldName(key);
+            missingFields.push(`${formattedField} list is empty`);
+          } else {
+            // Check individual array items for required fields
+            value.forEach((item, index) => {
+              if (typeof item === 'object' && item !== null) {
+                Object.entries(item).forEach(([subKey, subValue]) => {
+                  if (!subValue || (typeof subValue === 'string' && subValue.trim() === '')) {
+                    const formattedField = formatFieldName(subKey);
+                    const formattedParent = formatFieldName(key);
+                    missingFields.push(`${formattedParent} ${index + 1}: ${formattedField} is required`);
+                  }
+                });
+              }
+            });
           }
         } else if (!value || (typeof value === 'string' && value.trim() === '')) {
-          missingFields.push(`${key} is missing or empty`);
+          const formattedField = formatFieldName(key);
+          missingFields.push(`${formattedField} is required`);
         }
       });
 
       return missingFields;
+    }
+
+    function formatFieldName(fieldName) {
+      // Convert camelCase to Title Case with spaces
+      return fieldName
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, str => str.toUpperCase())
+        .replace(/([A-Z])/g, ' $1')
+        .trim();
     }
 
     // Fetch initial data on mount
@@ -365,6 +425,8 @@ export default {
       showResultMessage,
       submitSuccess,
       errorMessage,
+      missingFields,
+      showMissingFields,
       formValues,
       steps,
       quickSetupResource,
@@ -378,7 +440,8 @@ export default {
       nextStep,
       prevStep,
       submitForm,
-      checkMissingFields
+      checkMissingFields,
+      formatFieldName
     };
   }
 };
@@ -413,5 +476,128 @@ button {
 
 button:hover {
   background-color: #45a049;
+}
+
+/* Missing Fields Alert Styles */
+.missing-fields-alert {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: slideIn 0.3s ease-out;
+}
+
+.alert-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #ffeaa7;
+}
+
+.alert-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  color: #856404;
+}
+
+.alert-icon .icon {
+  width: 100%;
+  height: 100%;
+}
+
+.alert-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #856404;
+  margin: 0;
+  flex: 1;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.close-icon {
+  width: 20px;
+  height: 20px;
+  color: #856404;
+}
+
+.alert-content {
+  padding: 16px 20px 20px;
+}
+
+.alert-description {
+  color: #856404;
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.missing-fields-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.missing-field-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 0;
+  color: #856404;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.field-bullet {
+  color: #ffc107;
+  font-weight: bold;
+  margin-right: 12px;
+  font-size: 1.1rem;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .missing-fields-alert {
+    margin-bottom: 20px;
+  }
+  
+  .alert-header {
+    padding: 12px 16px 8px;
+  }
+  
+  .alert-content {
+    padding: 12px 16px 16px;
+  }
+  
+  .alert-title {
+    font-size: 1rem;
+  }
+  
+  .missing-field-item {
+    font-size: 0.85rem;
+  }
 }
 </style>

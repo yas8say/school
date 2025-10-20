@@ -13,13 +13,13 @@
     <div v-if="showResultMessage" class="modal-overlay">
       <div class="result-modal">
         <div v-if="submitSuccess" class="success-icon">
-          <svg class="icon" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <div v-else class="error-icon">
-          <svg class="icon" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </div>
         <h3 class="result-title">
@@ -156,7 +156,7 @@
               v-model="formData.student_data['Student Date of Birth']"
               type="date"
               class="input"
-              required
+              :max="getTodayDate()"
             >
             <span class="error-message" v-if="errors.studentDob">{{ errors.studentDob }}</span>
           </div>
@@ -248,7 +248,9 @@
               v-model="formData.student_data['Guardian Date of Birth']"
               type="date"
               class="input"
+              :max="getTodayDate()"
             >
+            <span class="error-message" v-if="errors.guardianDob">{{ errors.guardianDob }}</span>
           </div>
 
           <div class="form-group required">
@@ -531,6 +533,21 @@ export default {
         isValid = false;
       }
 
+      // Student Date of Birth validation
+      const studentDob = formData.student_data['Student Date of Birth'];
+      // Only validate if DOB is provided
+      if (studentDob && !validDate(studentDob)) {
+        errors.studentDob = 'Student date of birth cannot be in the future';
+        isValid = false;
+      }
+
+      // Guardian Date of Birth validation (optional field)
+      const guardianDob = formData.student_data['Guardian Date of Birth'];
+      if (guardianDob && !validDate(guardianDob)) {
+        errors.guardianDob = 'Guardian date of birth cannot be in the future';
+        isValid = false;
+      }
+
       // Optional fields validation (only if provided)
       const email = formData.student_data['Email Address'].trim();
       if (email && !validEmail(email)) {
@@ -571,6 +588,24 @@ export default {
       if (!phone) return true; // Optional field
       const re = /^[0-9]{10,15}$/;
       return re.test(phone);
+    }
+
+    function validDate(dateString) {
+      if (!dateString) return true; // Allow empty dates for optional fields
+      const inputDate = new Date(dateString);
+      const today = new Date();
+      // Set both dates to start of day for accurate comparison
+      today.setHours(0, 0, 0, 0);
+      inputDate.setHours(0, 0, 0, 0);
+      return inputDate <= today;
+    }
+
+    function getTodayDate() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
     function validateAndSubmit() {
@@ -655,7 +690,8 @@ export default {
       onClassChange,
       validateAndSubmit,
       resetForm,
-      resetAndClose
+      resetAndClose,
+      getTodayDate // Make this available to the template
     };
   }
 };

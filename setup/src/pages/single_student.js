@@ -14,39 +14,39 @@
         </div>
       </div>
 
-      <!-- Success/Error Result Modal -->
-      <div v-if="showResultModal" class="modal-overlay">
-        <div class="result-modal">
-          <div v-if="resultModalType === 'success'" class="success-icon">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <div v-else class="error-icon">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-          <h3 class="result-title">{{ resultModalTitle }}</h3>
-          <p class="result-description">{{ resultModalDescription }}</p>
-          <div class="modal-actions">
-            <button 
-              v-if="resultModalType === 'success'" 
-              class="success-button" 
-              @click="closeResultModal"
-            >
-              Continue
-            </button>
-            <button 
-              v-else 
-              class="primary-button" 
-              @click="closeResultModal"
-            >
-              Try Again
-            </button>
-          </div>
+    <!-- Success/Error Result Modal -->
+    <div v-if="showResultModal" class="modal-overlay">
+      <div class="result-modal">
+        <div v-if="resultModalType === 'success'" class="success-icon">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div v-else class="error-icon">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <h3 class="result-title">{{ resultModalTitle }}</h3>
+        <p class="result-description">{{ resultModalDescription }}</p>
+        <div class="modal-actions">
+          <button 
+            v-if="resultModalType === 'success'" 
+            class="success-button" 
+            @click="closeResultModal"
+          >
+            Continue
+          </button>
+          <button 
+            v-else 
+            class="primary-button" 
+            @click="closeResultModal"
+          >
+            Try Again
+          </button>
         </div>
       </div>
+    </div>
 
       <!-- White Card for Select Year, Class and Division -->
       <div class="form-card">
@@ -133,46 +133,19 @@
             {{ message.text }}
           </div>
 
-          <!-- Enrollment Summary -->
-          <div v-if="enrollmentSummary.total_processed > 0" class="summary-section">
-            <h4 class="section-title">Enrollment Summary</h4>
-            <div class="summary-stats">
-              <div class="stat-item">
-                <span class="stat-label">Total Processed</span>
-                <span class="stat-value">{{ enrollmentSummary.total_processed }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Successful</span>
-                <span class="stat-value valid">{{ enrollmentSummary.successful }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Failed</span>
-                <span class="stat-value warning">{{ enrollmentSummary.failed }}</span>
-              </div>
+          <!-- Detailed Errors Display -->
+          <div v-if="detailedErrors.length > 0" class="error-details">
+            <h4 class="section-title">Enrollment Errors ({{ detailedErrors.length }}):</h4>
+            <div v-for="(error, index) in detailedErrors" :key="index" class="error-message">
+              ❌ {{ error }}
             </div>
           </div>
 
-          <!-- Success Results -->
-          <div v-if="enrolledStudents.length > 0" class="success-details">
-            <h4 class="section-title">Successfully Enrolled ({{ enrolledStudents.length }})</h4>
-            <div class="results-list">
-              <div v-for="(student, index) in enrolledStudents" :key="index" class="success-message">
-                ✅ {{ student }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Error Results -->
-          <div v-if="failedEnrollments.length > 0" class="error-details">
-            <h4 class="section-title">Enrollment Errors ({{ failedEnrollments.length }})</h4>
-            <div class="results-list">
-              <div v-for="(failure, index) in failedEnrollments" :key="index" class="error-message">
-                <div class="error-student">
-                  <strong>{{ failure.student_data['First Name'] }} {{ failure.student_data['Middle Name'] }} {{ failure.student_data['Last Name'] }}</strong>
-                  <span class="student-details">(GR: {{ failure.student_data['GR Number'] }}, Roll: {{ failure.student_data['Roll No'] }})</span>
-                </div>
-                <div class="error-text">❌ {{ failure.error }}</div>
-              </div>
+          <!-- Success Results Display -->
+          <div v-if="successResults.length > 0" class="success-details">
+            <h4 class="section-title">Successfully Enrolled ({{ successResults.length }}):</h4>
+            <div v-for="(result, index) in successResults" :key="index" class="success-message">
+              ✅ {{ result }}
             </div>
           </div>
         </div>
@@ -205,14 +178,14 @@
                 <thead>
                   <tr>
                     <th class="actions">Actions</th>
-                    <th class="status-cell">Status</th>
+                    <th class="status-cell">Status</th> <!-- Add class here -->
                     <th v-for="(_, index) in previewHeaders" :key="'letter-'+index">
                       {{ getExcelColumnLetter(index) }}
                     </th>
                   </tr>
                   <tr>
                     <th class="actions"></th>
-                    <th class="status-cell"></th>
+                    <th class="status-cell"></th> <!-- Add class here -->
                     <th v-for="(header, index) in previewHeaders" :key="'header-'+index">
                       <select
                         v-model="mappings[index].type"
@@ -276,7 +249,7 @@ import {
   validateDateField, 
   validDate, 
   getTodayDate 
-} from '@/utils/dateUtils';
+} from '@/utils/dateUtils'; // Import date utilities
 
 export default {
   setup() {
@@ -317,13 +290,8 @@ export default {
     const pendingEdits = ref([]);
     
     // Enhanced state for better error handling
-    const enrolledStudents = ref([]);
-    const failedEnrollments = ref([]);
-    const enrollmentSummary = ref({
-      total_processed: 0,
-      successful: 0,
-      failed: 0
-    });
+    const detailedErrors = ref([]);
+    const successResults = ref([]);
     const processing = ref(false);
     const showResultModal = ref(false);
     const resultModalType = ref('success');
@@ -341,7 +309,7 @@ export default {
 
     // API Resources
     const academicYearsResource = createResource({
-      url: 'school.al_ummah.api4.get_academic_years',
+      url: 'school.al_ummah.api3.get_academic_years',
       params: { values: {} },
       onSuccess: (data) => {
         academicYears.value = Array.isArray(data) ? data : [];
@@ -360,7 +328,7 @@ export default {
     });
 
     const classesResource = createResource({
-      url: 'school.al_ummah.api4.get_classes',
+      url: 'school.al_ummah.api3.get_classes',
       params: { values: {} },
       onSuccess: (data) => {
         classes.value = Array.isArray(data) ? data : [];
@@ -377,7 +345,7 @@ export default {
     });
 
     const divisionsResource = createResource({
-      url: 'school.al_ummah.api4.get_divisions2',
+      url: 'school.al_ummah.api3.get_divisions2',
       params: {
         values: {
           classId: selectedClass.value,
@@ -396,44 +364,29 @@ export default {
     });
 
     const enrollStudentsResource = createResource({
-      url: 'school.al_ummah.api4.bulk_enroll_students',
-      method: 'POST',
+      url: 'school.al_ummah.api3.bulk_enroll_students',
+      params: {
+        academicYear: selectedYear.value,
+        className: selectedClass.value,
+        divisionName: selectedDivision.value,
+        students: [],
+        mappings: {}
+      },
       onSuccess: (data) => {
         console.log('Bulk enrollment successful:', data);
-        processing.value = false;
-        
-        if (data && data.success) {
-          // Update enrollment results
-          enrolledStudents.value = data.enrolled_students || [];
-          failedEnrollments.value = data.failed_enrollments || [];
-          enrollmentSummary.value = data.summary || {
-            total_processed: data.enrolled_students.length + data.failed_enrollments.length,
-            successful: data.enrolled_students.length,
-            failed: data.failed_enrollments.length
-          };
-          
-          // Update row statuses based on bulk response - FIXED to handle successful enrollments
-          updateRowStatusesFromBulkResponse(data.enrolled_students, data.failed_enrollments);
-          
-          // Show appropriate message and modal
-          if (failedEnrollments.value.length === 0) {
-            showMessage(`✅ Successfully enrolled all ${enrolledStudents.value.length} students!`, 'success');
-            showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${enrolledStudents.value.length} students!`);
-          } else {
-            showMessage(`Completed: ${enrolledStudents.value.length} successful, ${failedEnrollments.value.length} failed.`, 'warning');
-            showResultModalFunc('warning', 'Enrollment Completed with Errors', 
-              `Completed with ${enrolledStudents.value.length} successful enrollments and ${failedEnrollments.value.length} failures.`);
-          }
-        } else {
-          showMessage('Bulk enrollment completed with issues', 'warning');
-        }
+        showMessage('✅ Students enrolled successfully!', 'success');
+        pendingEdits.value = [];
       },
       onError: (err) => {
-        console.error('Error in bulk enrollment:', err);
-        processing.value = false;
-        showMessage(`Bulk enrollment failed: ${err.messages?.[0] || err.message || 'Unknown error'}`, 'error');
-        showResultModalFunc('error', 'Bulk Enrollment Failed', err.messages?.[0] || err.message || 'Unknown error occurred during bulk enrollment.');
+        console.error('Error enrolling students:', err);
+        // Individual error handling is done in the enrollment process
       }
+    });
+
+    // Single enrollment resource for individual processing
+    const singleEnrollResource = createResource({
+      url: 'school.al_ummah.api3.enroll_single_student',
+      method: 'POST'
     });
 
     // Fetch initial data on mount
@@ -486,9 +439,8 @@ export default {
         if (file) {
           fileSelected.value = file;
           showMessage(null);
-          enrolledStudents.value = [];
-          failedEnrollments.value = [];
-          enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+          detailedErrors.value = [];
+          successResults.value = [];
           try {
             const { data, headers } = await readExcelFile(file);
             previewData.value = data.slice(0, 100).map(row => ({
@@ -520,9 +472,8 @@ export default {
       mappings.value = [];
       editHistory.value = [];
       pendingEdits.value = [];
-      enrolledStudents.value = [];
-      failedEnrollments.value = [];
-      enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+      detailedErrors.value = [];
+      successResults.value = [];
       showMessage(null);
     }
 
@@ -602,56 +553,49 @@ export default {
       return student;
     }
 
-    function updateRowStatusesFromBulkResponse(enrolledStudents, failedEnrollments) {
-      console.log('Updating row statuses from bulk response...');
-      console.log('Enrolled students:', enrolledStudents);
-      console.log('Failed enrollments:', failedEnrollments);
+    async function enrollSingleStudent(student, rowIndex, studentName) {
+      try {
+        // Use utility functions for validation
+        // Student Date of Birth is now optional - only validate if provided
+        if (student['Student Date of Birth'] && student['Student Date of Birth'].toString().trim() !== '') {
+          const dobValidation = validateDateField(student['Student Date of Birth'], 'Student Date of Birth');
+          if (!dobValidation.isValid) throw new Error(dobValidation.error);
+        }
 
-      // Reset all statuses first
-      previewData.value.forEach(row => {
-        row._status = null;
-        row._error = null;
-      });
+        // Guardian Date of Birth validation remains optional
+        if (student['Guardian Date of Birth'] && student['Guardian Date of Birth'].toString().trim() !== '') {
+          const guardianDobValidation = validateDateField(student['Guardian Date of Birth'], 'Guardian Date of Birth');
+          if (!guardianDobValidation.isValid) throw new Error(guardianDobValidation.error);
+        }
 
-      // Update successful enrollments
-      enrolledStudents.forEach(studentName => {
-        console.log('Looking for successful student:', studentName);
-        const rowIndex = findRowIndexByStudentName(studentName);
-        if (rowIndex !== -1) {
-          console.log(`✅ Marking row ${rowIndex} as success for student: ${studentName}`);
+        const result = await enrollStudentsResource.submit({
+          academicYear: selectedYear.value,
+          className: selectedClass.value,
+          divisionName: selectedDivision.value,
+          students: [student],
+          mappings: {}
+        });
+
+        // Mark row as success
+        if (rowIndex !== undefined && previewData.value[rowIndex]) {
           previewData.value[rowIndex]._status = 'success';
           previewData.value[rowIndex]._error = null;
-        } else {
-          console.log(`❌ Could not find row for successful student: ${studentName}`);
         }
-      });
-
-      // Update failed enrollments
-      failedEnrollments.forEach(failure => {
-        const rowIndex = findRowIndexByStudentData(failure.student_data);
-        if (rowIndex !== -1) {
-          console.log(`❌ Marking row ${rowIndex} as error for student:`, failure.student_data['First Name']);
+        successResults.value.push(`Enrolled: ${studentName}`);
+        return { success: true, studentName };
+      } catch (error) {
+        console.error(`Error enrolling ${studentName}:`, error);
+        
+        // Mark row as error
+        if (rowIndex !== undefined && previewData.value[rowIndex]) {
           previewData.value[rowIndex]._status = 'error';
-          previewData.value[rowIndex]._error = failure.error || 'Unknown error';
+          previewData.value[rowIndex]._error = error.messages?.[0] || error.message || 'Unknown error';
         }
-      });
-    }
-
-    function findRowIndexByStudentName(studentName) {
-      return previewData.value.findIndex(row => {
-        const rowStudentData = prepareStudentData(row);
-        const rowFullName = `${rowStudentData['First Name']} ${rowStudentData['Middle Name']} ${rowStudentData['Last Name']}`.trim();
-        return rowFullName === studentName;
-      });
-    }
-
-    function findRowIndexByStudentData(studentData) {
-      return previewData.value.findIndex(row => {
-        const rowStudentData = prepareStudentData(row);
-        return rowStudentData['GR Number'] === studentData['GR Number'] && 
-               rowStudentData['First Name'] === studentData['First Name'] &&
-               rowStudentData['Last Name'] === studentData['Last Name'];
-      });
+        
+        const errorMessage = `${studentName}: ${error.messages?.[0] || error.message || 'Unknown error'}`;
+        detailedErrors.value.push(errorMessage);
+        return { success: false, studentName, error: errorMessage };
+      }
     }
 
     function showResultModalFunc(type, title, description) {
@@ -672,9 +616,8 @@ export default {
       console.log('Enroll button clicked');
 
       // Reset previous results
-      enrolledStudents.value = [];
-      failedEnrollments.value = [];
-      enrollmentSummary.value = { total_processed: 0, successful: 0, failed: 0 };
+      detailedErrors.value = [];
+      successResults.value = [];
       processing.value = true;
       
       // Reset row statuses
@@ -697,6 +640,7 @@ export default {
         processing.value = false;
         return;
       }
+
 
       // Validate that we have data to process
       if (!selectedYear.value || !selectedClass.value || !selectedDivision.value) {
@@ -761,7 +705,7 @@ export default {
       }
 
       try {
-        showMessage('Starting bulk enrollment process...', 'info');
+        showMessage('Starting enrollment process...', 'info');
         
         // Process all valid rows
         const validRows = previewData.value.filter(row => isRowValid(row));
@@ -772,31 +716,81 @@ export default {
           return;
         }
 
-        console.log(`Starting bulk enrollment for ${validRows.length} students...`);
+        console.log(`Starting enrollment for ${validRows.length} students...`);
         
-        // Prepare students data for bulk enrollment
+        // Use bulk enrollment for better performance
         const studentsData = validRows.map(row => {
           const student = prepareStudentData(row);
           return student;
         });
 
         // Perform bulk enrollment
-        await enrollStudentsResource.submit({
-          academicYear: selectedYear.value,
-          className: selectedClass.value,
-          divisionName: selectedDivision.value,
-          students: studentsData,
-          mappings: Object.fromEntries(
-            mappings.value
-              .filter(mapping => mapping.type)
-              .map(mapping => [mapping.type, mapping.column])
-          )
-        });
+        try {
+          const result = await enrollStudentsResource.submit({
+            academicYear: selectedYear.value,
+            className: selectedClass.value,
+            divisionName: selectedDivision.value,
+            students: studentsData,
+            mappings: {}
+          });
 
+          // Mark all valid rows as success
+          validRows.forEach(row => {
+            const rowIndex = previewData.value.indexOf(row);
+            if (rowIndex !== -1) {
+              previewData.value[rowIndex]._status = 'success';
+              previewData.value[rowIndex]._error = null;
+            }
+          });
+
+          studentsData.forEach(student => {
+            const studentName = `${student['First Name']} ${student['Last Name']}`.trim() || 'Unknown Student';
+            successResults.value.push(`Enrolled: ${studentName}`);
+          });
+
+          showMessage(`✅ Successfully enrolled all ${successResults.value.length} students!`, 'success');
+          showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${successResults.value.length} students!`);
+          
+        } catch (bulkError) {
+          console.error('Bulk enrollment failed:', bulkError);
+          
+          // If bulk fails, try individual enrollment
+          console.log('Bulk enrollment failed, trying individual enrollment...');
+          
+          for (let i = 0; i < validRows.length; i++) {
+            const row = validRows[i];
+            const rowIndex = previewData.value.indexOf(row);
+            const student = prepareStudentData(row);
+            const studentName = `${student['First Name']} ${student['Last Name']}`.trim() || `Student ${i + 1}`;
+            
+            console.log(`Enrolling student ${i + 1}/${validRows.length}:`, studentName);
+            
+            // Use bulk with single student for individual error handling
+            await enrollSingleStudent(student, rowIndex, studentName);
+            
+            // Small delay to avoid overwhelming the server
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          // Show final summary
+          if (detailedErrors.value.length === 0) {
+            showMessage(`✅ Successfully enrolled all ${successResults.value.length} students!`, 'success');
+            showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${successResults.value.length} students!`);
+          } else if (successResults.value.length === 0) {
+            showMessage(`❌ All enrollments failed. Please check the errors below.`, 'error');
+            showResultModalFunc('error', 'Enrollment Failed', 'All enrollments failed. Please check the error details below.');
+          } else {
+            showMessage(`Completed: ${successResults.value.length} successful, ${detailedErrors.value.length} failed.`, 'warning');
+            showResultModalFunc('warning', 'Enrollment Completed with Errors', 
+              `Completed with ${successResults.value.length} successful enrollments and ${detailedErrors.value.length} failures.`);
+          }
+        }
+        
       } catch (error) {
-        console.error('Bulk enrollment process error:', error);
-        showMessage(`Bulk enrollment process failed: ${error.message || 'Unknown error'}`, 'error');
-        showResultModalFunc('error', 'Bulk Enrollment Process Failed', error.message || 'Unknown error occurred during enrollment.');
+        console.error('Enrollment process error:', error);
+        showMessage(`Enrollment process failed: ${error.message || 'Unknown error'}`, 'error');
+        showResultModalFunc('error', 'Enrollment Process Failed', error.message || 'Unknown error occurred during enrollment.');
+      } finally {
         processing.value = false;
       }
     }
@@ -956,22 +950,10 @@ export default {
         const lastEdit = pendingEdits.value[pendingEdits.value.length - 1];
         const row = previewData.value[lastEdit.rowIndex];
         const student = prepareStudentData(row);
+        const studentName = `${student['First Name']} ${student['Last Name']}`.trim() || 'Student';
         
-        // Use bulk enrollment with single student for updates
-        await enrollStudentsResource.submit({
-          academicYear: selectedYear.value,
-          className: selectedClass.value,
-          divisionName: selectedDivision.value,
-          students: [student],
-          mappings: Object.fromEntries(
-            mappings.value
-              .filter(mapping => mapping.type)
-              .map(mapping => [mapping.type, mapping.column])
-          )
-        });
-        
-        // Clear pending edits on success
-        pendingEdits.value = [];
+        // Use the enrollment function for individual updates
+        await enrollSingleStudent(student, lastEdit.rowIndex, studentName);
         
       } catch (error) {
         console.error('Error sending cell update:', error);
@@ -995,9 +977,8 @@ export default {
       previewHeaders,
       editHistory,
       pendingEdits,
-      enrolledStudents,
-      failedEnrollments,
-      enrollmentSummary,
+      detailedErrors,
+      successResults,
       processing,
       showResultModal,
       resultModalType,
