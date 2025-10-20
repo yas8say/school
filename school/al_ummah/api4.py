@@ -32,6 +32,14 @@ def get_classes():
     return classes
 
 @frappe.whitelist()
+def get_divisions1(values):
+    class_name = values.get("classId")  # Extract classId from the values dictionary
+    edu_settings = frappe.get_single("Education Settings")
+    year = edu_settings.current_academic_year
+    divisions = frappe.get_all("Student Group", filters={"program": class_name, "academic_year": year})
+    return divisions
+    
+@frappe.whitelist()
 def get_divisions2(values):
     class_name = values.get("classId")  # Extract classId from the values dictionary
     year = values.get("academicYear")
@@ -128,6 +136,7 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
                     "email": guardian_email,
                 }).insert(ignore_permissions=True)
                 user_doc.add_roles("Guardian")
+                user_doc.user_type = "Website User"
                 user_name = user_doc.name
 
             # Create Guardian and link to User
@@ -173,6 +182,7 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
 
 @frappe.whitelist()
 def enroll_student(student, className, divisionName, year, term):
+    dob = student["Student Date of Birth"]
     first_name = student["First Name"]
     middle_name = student.get("Middle Name", "")
     last_name = student["Last Name"]
@@ -217,6 +227,7 @@ def enroll_student(student, className, divisionName, year, term):
         user.username = f"{first_name.lower()}{student.get('GR Number', '')}".replace(" ", "")
         if not frappe.db.exists("User", {"mobile_no": phone}):
             user.mobile_no = phone
+        user.date_birth = dob
         user.send_welcome_email = 0
         user.enabled = 1
         user.user_type = "Website User"
@@ -235,6 +246,7 @@ def enroll_student(student, className, divisionName, year, term):
         student_doc.last_name = last_name
         student_doc.student_email_id = email
         student_doc.user = email
+        student_doc.date_of_birth = dob
         student_doc.student_mobile_number = phone
         student_doc.gr_number = student["GR Number"]
         student_doc.save()
@@ -290,7 +302,7 @@ def enroll_student(student, className, divisionName, year, term):
 
     except Exception as e:
         # Cleanup: If any step fails, delete any successfully created documents
-        cleanup_created_docs(user, student_doc, program_enrollment)
+        # cleanup_created_docs(user, student_doc, program_enrollment)
         frappe.throw(f"Failed to enroll student {full_name}: {str(e)}")
 
 
@@ -626,6 +638,7 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
                 "date_birth": date_of_birth,
                 "gender": gender,
                 "new_password": password,
+                "user_type": "Website User"
             }).insert()
             
             # Check if User creation was successful

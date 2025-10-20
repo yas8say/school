@@ -351,7 +351,7 @@
   line-height: 1.5;
 }
 
-/* Success and Error Icons - Fixed */
+/* Success and Error Icons */
 .success-icon,
 .error-icon {
   width: 5rem;
@@ -382,7 +382,7 @@
   height: 2.5rem;
   stroke: currentColor;
   stroke-width: 3;
-  fill: none; /* Ensure no fill color */
+  fill: none;
 }
 
 /* Remove any conflicting icon styles */
@@ -413,7 +413,7 @@ svg:not(.icon) {
   text-align: center;
 }
 
-/* Modal Actions - Fixed Button Heights */
+/* Modal Actions */
 .modal-actions {
   display: flex;
   gap: 1rem;
@@ -423,7 +423,7 @@ svg:not(.icon) {
   flex-wrap: wrap;
 }
 
-/* Success Button - Fixed height */
+/* Success Button */
 .success-button {
   background: #27ae60;
   color: white;
@@ -467,7 +467,7 @@ svg:not(.icon) {
   transform: translateY(-1px);
 }
 
-/* Secondary Button - Consistent height */
+/* Secondary Button */
 .secondary-button {
   background: #f5f5f5;
   color: #7f8c8d;
@@ -529,7 +529,7 @@ svg:not(.icon) {
   min-width: 140px;
 }
 
-/* Action and Status Columns - Same width */
+/* Action and Status Columns */
 .preview-table th.actions,
 .preview-table td.actions,
 .preview-table th.status-cell,
@@ -775,6 +775,157 @@ svg:not(.icon) {
   font-style: italic;
 }
 
+/* Table Spacing */
+.table-spacing {
+  height: 20px;
+}
+
+/* Error Students Card Styles */
+.error-students-card {
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(254, 178, 178, 0.1);
+}
+
+.error-students-card .error-details {
+  background-color: #fff5f5;
+  border: 1px solid #fed7d7;
+  margin-top: 10px;
+}
+
+.error-students-card .section-title {
+  border-bottom-color: #e53e3e;
+}
+
+.error-students-card .section-title::before {
+  background: #e53e3e;
+}
+
+.error-students-card .error-message {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(229, 62, 62, 0.1);
+}
+
+.error-students-card .error-message:last-child {
+  border-bottom: none;
+}
+
+.error-students-card .error-student {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.error-students-card .error-student strong {
+  color: #2d3748;
+  font-size: 0.95rem;
+}
+
+.error-students-card .student-details {
+  color: #718096;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.error-students-card .error-text {
+  color: #e53e3e;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.error-indicator {
+  margin-left: 0.25rem;
+  animation: pulse 2s infinite;
+}
+
+/* Summary Card Specific Styles */
+.summary-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-left: 4px solid #3498db;
+}
+
+.summary-card .form-title {
+  color: #2c3e50;
+  border-bottom-color: #e2e8f0;
+}
+
+.summary-card .success-details {
+  margin-top: 1rem;
+  background-color: #e6ffe6;
+  border: 1px solid #ccffcc;
+}
+
+.summary-card .success-details .section-title {
+  border-bottom-color: #27ae60;
+}
+
+.summary-card .success-details .section-title::before {
+  background: #27ae60;
+}
+
+.summary-card .error-details {
+  margin-top: 1rem;
+  background-color: #fff5f5;
+  border: 1px solid #fed7d7;
+}
+
+.summary-card .section-title {
+  border-bottom-color: #e53e3e;
+}
+
+.summary-card .section-title::before {
+  background: #e53e3e;
+}
+
+/* Scrollable content styles */
+.error-details,
+.error-students-card .error-details,
+.success-details {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.error-details::-webkit-scrollbar,
+.error-students-card .error-details::-webkit-scrollbar,
+.success-details::-webkit-scrollbar {
+  width: 6px;
+}
+
+.error-details::-webkit-scrollbar-track,
+.error-students-card .error-details::-webkit-scrollbar-track,
+.success-details::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 3px;
+}
+
+.error-details::-webkit-scrollbar-thumb,
+.error-students-card .error-details::-webkit-scrollbar-thumb,
+.success-details::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.error-details::-webkit-scrollbar-thumb:hover,
+.error-students-card .error-details::-webkit-scrollbar-thumb:hover,
+.success-details::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .enrollment-container {
@@ -874,8 +1025,27 @@ svg:not(.icon) {
     width: 1.8rem;
     height: 1.8rem;
   }
-}
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  /* Error Students Card Mobile */
+  .error-students-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .error-students-card .error-student {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .error-students-card .student-details {
+    font-size: 0.8rem;
+  }
+  
+  .error-students-card .error-text {
+    font-size: 0.8rem;
+  }
+  .multiple-errors {
+  font-size: 0.9em;
+}
 }

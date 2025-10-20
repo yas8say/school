@@ -5,7 +5,7 @@
         <h1 class="title">Teacher Enrollment</h1>
       </div>
 
-      <!-- File Upload Section with Enroll Button -->
+      <!-- File Upload Section -->
       <div class="form-card">
         <h2 class="form-title">Upload Teacher Data</h2>
         <div class="form-section">
@@ -37,47 +37,47 @@
           <div v-if="message" :class="['message', message.type]">
             {{ message.text }}
           </div>
+        </div>
+      </div>
 
-          <!-- Enrollment Summary -->
-          <div v-if="enrollmentSummary.total_processed > 0" class="summary-section">
-            <h4 class="section-title">Enrollment Summary</h4>
-            <div class="summary-stats">
-              <div class="stat-item">
-                <span class="stat-label">Total Processed</span>
-                <span class="stat-value">{{ enrollmentSummary.total_processed }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Successful</span>
-                <span class="stat-value valid">{{ enrollmentSummary.successful }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Failed</span>
-                <span class="stat-value warning">{{ enrollmentSummary.failed }}</span>
-              </div>
+      <!-- Enrollment Summary Card - SEPARATE CARD with ALL Results -->
+      <div v-if="enrollmentSummary.total_processed > 0" class="form-card summary-card">
+        <h2 class="form-title">Enrollment Summary</h2>
+        <div class="summary-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Processed</span>
+            <span class="stat-value">{{ enrollmentSummary.total_processed }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Successful</span>
+            <span class="stat-value valid">{{ enrollmentSummary.successful }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Failed</span>
+            <span class="stat-value warning">{{ enrollmentSummary.failed }}</span>
+          </div>
+        </div>
+
+        <!-- Successfully Enrolled inside Summary Card -->
+        <div v-if="enrolledTeachers.length > 0" class="success-details">
+          <h4 class="section-title">Successfully Enrolled ({{ enrolledTeachers.length }})</h4>
+          <div class="results-list">
+            <div v-for="(teacher, index) in enrolledTeachers" :key="index" class="success-message">
+              ✅ {{ teacher }}
             </div>
           </div>
+        </div>
 
-          <!-- Success Results -->
-          <div v-if="enrolledTeachers.length > 0" class="success-details">
-            <h4 class="section-title">Successfully Enrolled ({{ enrolledTeachers.length }})</h4>
-            <div class="results-list">
-              <div v-for="(teacher, index) in enrolledTeachers" :key="index" class="success-message">
-                ✅ {{ teacher }}
+        <!-- Enrollment Errors inside Summary Card -->
+        <div v-if="failedEnrollments.length > 0" class="error-details">
+          <h4 class="section-title">Enrollment Errors ({{ failedEnrollments.length }})</h4>
+          <div class="results-list">
+            <div v-for="(failure, index) in failedEnrollments" :key="index" class="error-message">
+              <div class="error-student">
+                <strong>{{ failure.instructor_data['First Name'] }} {{ failure.instructor_data['Middle Name'] }} {{ failure.instructor_data['Last Name'] }}</strong>
+                <span class="student-details">(Email: {{ failure.instructor_data['Email'] }}, Mobile: {{ failure.instructor_data['Mobile'] }})</span>
               </div>
-            </div>
-          </div>
-
-          <!-- Error Results -->
-          <div v-if="failedEnrollments.length > 0" class="error-details">
-            <h4 class="section-title">Enrollment Errors ({{ failedEnrollments.length }})</h4>
-            <div class="results-list">
-              <div v-for="(failure, index) in failedEnrollments" :key="index" class="error-message">
-                <div class="error-student">
-                  <strong>{{ failure.instructor_data['First Name'] }} {{ failure.instructor_data['Middle Name'] }} {{ failure.instructor_data['Last Name'] }}</strong>
-                  <span class="student-details">(Email: {{ failure.instructor_data['Email'] }}, Mobile: {{ failure.instructor_data['Mobile'] }})</span>
-                </div>
-                <div class="error-text">❌ {{ failure.error }}</div>
-              </div>
+              <div class="error-text">❌ {{ failure.error }}</div>
             </div>
           </div>
         </div>
@@ -103,13 +103,48 @@
           </div>
           <div class="stat-item">
             <span class="stat-label">Need Attention:</span>
-            <span class="stat-value warning">{{ invalidRowsCount }}</span>
+            <span class="stat-value warning" 
+                  style="cursor: pointer;" 
+                  @click="showErrorTeachersList = !showErrorTeachersList"
+                  :title="invalidRowsCount > 0 ? 'Click to view teachers with errors' : ''">
+              {{ invalidRowsCount }}
+              <span v-if="invalidRowsCount > 0" class="error-indicator">⚠️</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Error Teachers Card - Scrollable like Enrollment Errors -->
+        <div v-if="showErrorTeachersList && errorRows.length > 0" class="error-students-card">
+          <h4 class="section-title">Teachers with Errors ({{ invalidRowsCount }})</h4>
+          <div class="error-details" style="max-height: 200px; overflow-y: auto;">
+            <div class="results-list">
+              <div v-for="(row, rowIndex) in errorRows" :key="rowIndex" class="error-message">
+                <div class="error-student">
+                  <strong>{{ getTeacherFullName(row) }}</strong>
+                  <span class="student-details">
+                    (Email: {{ getTeacherEmail(row) }}, Mobile: {{ getTeacherMobile(row) }})
+                  </span>
+                </div>
+              <div class="error-text">
+                ⚠️ 
+                <span v-if="getRowError(row).includes(';')" class="multiple-errors">
+                  {{ getRowError(row) }}
+                </span>
+                <span v-else>
+                  {{ getRowError(row) }}
+                </span>
+              </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="instructions">
           <p>💡 <strong>Note:</strong> Class and Division are optional fields. Only assign them for teachers who are class teachers.</p>
         </div>
+
+        <!-- Space between error list and table -->
+        <div class="table-spacing" v-if="showErrorTeachersList && errorRows.length > 0"></div>
 
         <div class="table-container-wrapper">
           <div class="table-scroll-container">
@@ -216,39 +251,39 @@
         </div>
       </div>
 
-    <!-- Success/Error Result Modal -->
-    <div v-if="showResultModal" class="modal-overlay">
-      <div class="result-modal">
-        <div v-if="resultModalType === 'success'" class="success-icon">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <div v-else class="error-icon">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </div>
-        <h3 class="result-title">{{ resultModalTitle }}</h3>
-        <p class="result-description">{{ resultModalDescription }}</p>
-        <div class="modal-actions">
-          <button 
-            v-if="resultModalType === 'success'" 
-            class="success-button" 
-            @click="closeResultModal"
-          >
-            Continue
-          </button>
-          <button 
-            v-else 
-            class="primary-button" 
-            @click="closeResultModal"
-          >
-            Try Again
-          </button>
+      <!-- Success/Error Result Modal -->
+      <div v-if="showResultModal" class="modal-overlay">
+        <div class="result-modal">
+          <div v-if="resultModalType === 'success'" class="success-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div v-else class="error-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <h3 class="result-title">{{ resultModalTitle }}</h3>
+          <p class="result-description">{{ resultModalDescription }}</p>
+          <div class="modal-actions">
+            <button 
+              v-if="resultModalType === 'success'" 
+              class="success-button" 
+              @click="closeResultModal"
+            >
+              Continue
+            </button>
+            <button 
+              v-else 
+              class="primary-button" 
+              @click="closeResultModal"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </div>
   </div>
 </template>
@@ -269,6 +304,7 @@ import {
 export default {
   setup() {
     // Reactive state
+    const showErrorTeachersList = ref(false);
     const mappings = ref([]);
     const fileSelected = ref(null);
     const options = ref([
@@ -325,6 +361,102 @@ export default {
     const invalidRowsCount = computed(() => {
       return previewData.value.filter(row => !isRowValid(row)).length;
     });
+
+    const errorRows = computed(() => {
+      return previewData.value.filter(row => !isRowValid(row));
+    });
+
+    // Methods for error teachers display
+    function getTeacherFullName(row) {
+      const teacher = prepareTeacherData(row);
+      return `${teacher['First Name'] || ''} ${teacher['Middle Name'] || ''} ${teacher['Last Name'] || ''}`.trim() || 'Unknown Teacher';
+    }
+
+    function getTeacherEmail(row) {
+      const teacher = prepareTeacherData(row);
+      return teacher['Email'] || 'N/A';
+    }
+
+    function getTeacherMobile(row) {
+      const teacher = prepareTeacherData(row);
+      return teacher['Mobile'] || 'N/A';
+    }
+
+    function getRowError(row) {
+      // Completely ignore enrollment errors in field validation
+      // Enrollment errors should only appear in the enrollment results section
+      
+      const errors = [];
+      
+      // Check for missing required fields
+      const requiredFields = [
+        'Mobile', 
+        'Email', 
+        'Gender', 
+        'First Name', 
+        'Last Name', 
+        "Attendance Device ID (Biometric/RF tag ID)",
+        "Date of Birth",
+        "Date of Joining"
+      ];
+      
+      requiredFields.forEach(field => {
+        const mappingIndex = mappings.value.findIndex(m => m.type === field);
+        
+        if (mappingIndex === -1) {
+          // Field is not mapped at all
+          errors.push(`${field} not mapped`);
+        } else {
+          const columnIndex = XLSX.utils.decode_col(mappings.value[mappingIndex].column);
+          const columnName = previewHeaders.value[columnIndex];
+          const value = row[columnName];
+          
+          if (!value || value.toString().trim() === '') {
+            errors.push(`${field} missing`);
+          } else {
+            // Field-specific validation
+            switch (field) {
+              case 'Mobile':
+                const mobileDigits = value.toString().replace(/\D/g, '');
+                if (mobileDigits.length < 10) errors.push('Invalid mobile number');
+                break;
+                
+              case 'Email':
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(value.toString().trim())) errors.push('Invalid email format');
+                break;
+                
+              case 'Gender':
+                const gender = value.toString().trim().toLowerCase();
+                const validGenders = ['male', 'female', 'other', 'm', 'f', 'o'];
+                if (!validGenders.includes(gender)) errors.push('Invalid gender');
+                break;
+                
+              case 'Date of Birth':
+                const dobValidation = validateDateField(value, 'Date of Birth');
+                if (!dobValidation.isValid) errors.push(dobValidation.error);
+                break;
+                
+              case 'Date of Joining':
+                const dojValidation = validateDateField(value, 'Date of Joining');
+                if (!dojValidation.isValid) errors.push(dojValidation.error);
+                break;
+            }
+          }
+        }
+      });
+      
+      // Check for class/division validation
+      if (row.className && !row.divisionName) {
+        errors.push('Class selected but no division assigned');
+      }
+      
+      if (errors.length > 0) {
+        return errors.join('; ');
+      }
+      
+      return 'Check field mappings';
+    }
 
     // API Resources
     const classesResource = createResource({
@@ -607,8 +739,11 @@ export default {
     }
 
     function getRowStatusClass(row) {
+      // Show enrollment success
       if (row._status === 'success') return 'row-success';
-      if (row._status === 'error') return 'row-error';
+      // Show enrollment error (but don't interfere with field validation)
+      if (row._enrollment_status === 'error') return 'row-enrollment-error';
+      // Show field validation errors
       if (!isRowValid(row)) return 'row-invalid';
       return '';
     }
@@ -663,10 +798,8 @@ export default {
 
     function updateRowStatusesFromBulkResponse(enrolledTeachers, failedEnrollments) {
       console.log('Updating row statuses from bulk response...');
-      console.log('Enrolled teachers:', enrolledTeachers);
-      console.log('Failed enrollments:', failedEnrollments);
 
-      // Reset all statuses first
+      // Reset ALL statuses completely to avoid mixing enrollment and validation errors
       previewData.value.forEach(row => {
         row._status = null;
         row._error = null;
@@ -674,24 +807,20 @@ export default {
 
       // Update successful enrollments
       enrolledTeachers.forEach(teacherName => {
-        console.log('Looking for successful teacher:', teacherName);
         const rowIndex = findRowIndexByTeacherName(teacherName);
         if (rowIndex !== -1) {
-          console.log(`✅ Marking row ${rowIndex} as success for teacher: ${teacherName}`);
           previewData.value[rowIndex]._status = 'success';
           previewData.value[rowIndex]._error = null;
-        } else {
-          console.log(`❌ Could not find row for successful teacher: ${teacherName}`);
         }
       });
 
-      // Update failed enrollments
+      // Update failed enrollments - BUT use a different property to avoid conflict
       failedEnrollments.forEach(failure => {
         const rowIndex = findRowIndexByTeacherData(failure.instructor_data);
         if (rowIndex !== -1) {
-          console.log(`❌ Marking row ${rowIndex} as error for teacher:`, failure.instructor_data['First Name']);
-          previewData.value[rowIndex]._status = 'error';
-          previewData.value[rowIndex]._error = failure.error || 'Unknown error';
+          // Use a separate property for enrollment errors
+          previewData.value[rowIndex]._enrollment_status = 'error';
+          previewData.value[rowIndex]._enrollment_error = failure.error || 'Unknown error';
         }
       });
     }
@@ -1042,9 +1171,15 @@ export default {
       resultModalType,
       resultModalTitle,
       resultModalDescription,
+      showErrorTeachersList, // REMOVED DUPLICATES BELOW
       validRowsCount,
       classTeachersCount,
       invalidRowsCount,
+      errorRows,
+      getTeacherFullName,
+      getTeacherEmail,
+      getTeacherMobile,
+      getRowError,
       classesResource,
       divisionsResource,
       enrollTeachersResource,
