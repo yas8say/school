@@ -908,37 +908,45 @@ export default {
         "Phone Number": ["phone", "mobile", "contact"],
         "GR Number": ["gr", "grno", "gr_num", "gr no"],
         "Roll No": ["r. no", "roll", "rollno", "roll_num"],
-        "Student Date of Birth": ["dob", "birth", "birthdate", "date of birth", "student dob", "student date of birth"],
-        "Guardian Date of Birth": ["guardian dob", "parent dob", "father dob", "mother dob", "guardian date of birth"],
+        "Student Date of Birth": ["dob", "birth", "birthdate", "date of birth"],
+        "Guardian Date of Birth": ["guardian dob", "parent dob", "father dob", "mother dob"],
         "Guardian Name": ["guardian name", "parent", "father", "mother"],
-        "Guardian Number": [
-          "guardian no",      // This should match "guardian no"
-          "guardian number", 
-          "guardian phone", 
-          "parent phone", 
-          "father phone", 
-          "mother phone", 
-          "guardian mobile",
-          "guardian contact",
-          "parent number",
-          "parent mobile"
-        ],
+        "Guardian Number": ["guardian no", "guardian number", "guardian phone", "parent phone"],
         "Relation": ["relation", "relationship"],
-        "Guardian Email": ["guardian email", "parent email", "father email", "mother email", "guard. email"]
+        "Guardian Email": ["guardian email", "parent email", "father email", "mother email"]
       };
       
       headers.forEach((header, index) => {
         if (!header) return;
         const headerLower = header.toLowerCase().trim();
+        
+        // SPECIAL HANDLING FOR EMAIL FIELDS FIRST
+        if (headerLower.includes('email')) {
+          if (headerLower.includes('guardian') || headerLower.includes('parent')) {
+            mappings.value[index].type = 'Guardian Email';
+            console.log(`✓ Guardian Email: "${header}"`);
+            return;
+          } else {
+            mappings.value[index].type = 'Email Address';
+            console.log(`✓ Student Email: "${header}"`);
+            return;
+          }
+        }
+        
+        // NORMAL MATCHING FOR OTHER FIELDS
         for (const [field, patterns] of Object.entries(fieldPatterns)) {
           if (patterns.some(pattern => headerLower.includes(pattern))) {
+            // Skip if this is an email field (we already handled them)
+            if (field === "Email Address" || field === "Guardian Email") continue;
+            
             mappings.value[index].type = field;
+            console.log(`✓ ${field}: "${header}"`);
             break;
           }
         }
       });
 
-      console.log('Auto-detected mappings:', mappings.value);
+      console.log('Final auto-detected mappings:', mappings.value);
     }
 
     function readExcelFile(file) {

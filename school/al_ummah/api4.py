@@ -628,19 +628,20 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
     try:
         # --- Step 1: Create User (only if not provided) ---
         if not user_doc:
-            user_doc = frappe.get_doc({
-                "doctype": "User",
-                "email": email,
-                "mobile_no": phone,
-                "first_name": first_name,
-                "middle_name": middle_name,
-                "last_name": last_name,
-                "date_birth": date_of_birth,
-                "gender": gender,
-                "new_password": password,
-                "user_type": "Website User"
-            }).insert()
-            
+            user_doc = frappe.new_doc("User")
+            user_doc.first_name = first_name
+            user_doc.middle_name = middle_name
+            user_doc.last_name = last_name
+            user_doc.email = email
+            user_doc.username = f"{first_name.lower()}{phone}".replace(" ", "")
+            user_doc.mobile_no = phone
+            user_doc.date_birth = date_of_birth
+            user_doc.send_welcome_email = 0
+            user_doc.enabled = 1
+            user_doc.user_type = "Website User"
+            user_doc.save()
+            user_doc.add_roles("Instructor")
+     
             # Check if User creation was successful
             if not user_doc.name:
                 raise Exception("Failed to create User account")
@@ -648,10 +649,6 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
             print(f"✅ User created successfully: {user_doc.name}")
         else:
             print(f"✅ Using existing user: {user_doc.name}")
-
-        # Add Instructor role to user
-        user_doc.add_roles("Instructor")
-        print(f"✅ Instructor role added to user: {user_doc.name}")
 
         # --- Step 2: Create Employee (only if User was successful) ---
         employee_doc = create_employee(
