@@ -496,6 +496,99 @@ def send_otp(phone: str):
         return {"success": False, "message": "Server Error. Please try again."}
 
 
+@frappe.whitelist(allow_guest=True)
+def send_otp_web(phone: str, role: str):
+    """
+    Sends OTP via MSG91 to the given phone number if:
+      1. The user exists in the 'User' doctype.
+      2. The user has the specified role.
+
+    Args:
+        phone (str): User's mobile number (without country code)
+        role (str): Expected role name (e.g., 'Guardian', 'Instructor')
+
+    Returns:
+        dict: Success or failure response
+    """
+    # 1️⃣ Check if user exists
+    user_name = frappe.db.exists("User", {"mobile_no": phone})
+    if not user_name:
+        return {"success": False, "message": "Phone number not registered!"}
+
+    # 2️⃣ Fetch user document
+    user_doc = frappe.get_doc("User", user_name)
+
+    # 3️⃣ Verify role presence
+    user_roles = [r.role for r in user_doc.roles]
+    if role not in user_roles:
+        return {"success": False, "message": f"User does not have '{role}' role."}
+
+    # 4️⃣ Send OTP via MSG91
+    url = "https://control.msg91.com/api/v5/otp"
+    payload = {
+        "authkey": MSG91_AUTH_KEY,
+        "mobile": f"91{phone}",
+        "template_id": MSG91_OTP_TEMPLATE_ID,
+        "otp_length": 6,
+        "otp_expiry": 5,
+        "realTimeResponse": 1
+    }
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+
+        if data.get("type") == "success":
+            return {"success": True, "otp_sent": True, "message": "OTP sent successfully."}
+        else:
+            return {"success": False, "message": data.get("message", "OTP sending failed.")}
+    
+    except requests.exceptions.RequestException as e:
+        frappe.log_error(f"MSG91 OTP Sending Error: {str(e)}")
+        return {"success": False, "message": "Server Error. Please try again."}
+
+@frappe.whitelist(allow_guest=True)
+def verify_otp_and_create_session(phone: str, otp: str, role: str = None):
+    """
+    Verifies OTP and creates a user session using LoginManager.
+    Returns session ID (sid), user info, and roles.
+    """
+    # 1️⃣ Verify OTP
+    if not verify_otp(phone, otp):
+        frappe.throw("Incorrect OTP!", frappe.AuthenticationError)
+
+    # 2️⃣ Find user linked to this phone
+    user = frappe.db.get_value("User", {"mobile_no": phone}, "name")
+    if not user:
+        frappe.throw("User not found for this phone number.", frappe.AuthenticationError)
+
+    # 3️⃣ Check role (if provided)
+    user_roles = frappe.get_roles(user)
+    if role:
+        required_role = "Guardian" if role == "Guardian" else "Instructor"
+        if required_role not in user_roles:
+            frappe.throw(
+                f"User does not have {required_role} role. Roles: {', '.join(user_roles)}",
+                frappe.PermissionError
+            )
+
+    # 4️⃣ Create session using LoginManager
+    login_manager = frappe.auth.LoginManager()
+    login_manager.user = user
+    login_manager.post_login()  # sets frappe.session and sid
+
+    # 5️⃣ Return session info
+    print(f"✅ OTP verified, session created for {user}")
+    return {
+        "status": "success",
+        "message": "OTP verified. Session created.",
+        "user": user,
+        "roles": user_roles,
+        "sid": frappe.session.sid
+    }
+
+
 # @frappe.whitelist(allow_guest=True)
 # def verify_otp_and_create_session(phone: str, otp: str, role: str):
 #     """
@@ -589,52 +682,78 @@ def get_user_name_with_phone(phone: str):
 
     return frappe.db.get_value("User", {"mobile_no": phone}, "name")
 
-import frappe
 import requests
+import frappe
+from frappe.auth import LoginManager
 
 GOOGLE_OAUTH2_URL = "https://oauth2.googleapis.com/tokeninfo"
 
 @frappe.whitelist(allow_guest=True)
-def verify_google_token(id_token: str):
+def verify_google_token_and_create_session(id_token: str, role: str = None):
+    # print(id_token, role)
     """
-    Verifies Google ID token and returns API key & secret if the user exists in Frappe.
+    Verifies Google ID token, authenticates user by email, 
+    validates required role, and creates a Frappe session using LoginManager.
     """
     try:
-        # Verify the Google ID token
+        # 1️⃣ Verify Google token with Google OAuth2 API
         response = requests.get(f"{GOOGLE_OAUTH2_URL}?id_token={id_token}")
         token_info = response.json()
 
         if "email" not in token_info:
-            return {"success": False, "error": "Invalid token"}
+            frappe.throw("Invalid Google token", frappe.AuthenticationError)
 
         email = token_info["email"]
+        frappe.logger().info(f"🔍 Google token verified for {email}")
 
-        # Check if user exists in Frappe
-        if not frappe.db.exists("User", email):
-            return {"success": False, "error": "User not found"}
+        # 2️⃣ Ensure user exists in Frappe
+        user = frappe.db.get_value("User", {"email": email}, "name")
+        if not user:
+            frappe.throw("No user found with this Google account", frappe.AuthenticationError)
 
-        user_doc = frappe.get_doc("User", email)
+        # 3️⃣ Fetch user roles
+        user_roles = frappe.get_roles(user)
+        frappe.logger().info(f"User roles for {email}: {user_roles}")
 
-        # Generate API Key if it doesn't exist
-        api_key = user_doc.api_key if user_doc.api_key else frappe.generate_hash(length=15)
-        frappe.db.set_value("User", email, "api_key", api_key)
+        # 4️⃣ Validate role if provided
+        if role:
+            required_role = role.strip()
+            if required_role not in user_roles:
+                frappe.throw(
+                    f"User does not have '{required_role}' role. Available roles: {', '.join(user_roles)}",
+                    frappe.PermissionError
+                )
+
+        # 5️⃣ Create session using LoginManager
+        login_manager = LoginManager()
+        login_manager.user = user
+        login_manager.post_login()
+
         frappe.db.commit()
+        frappe.logger().info(f"✅ Google login successful for {email}")
 
-        try:
-            api_secret = frappe.utils.password.get_decrypted_password("User", email, "api_secret")
-        except frappe.exceptions.AuthenticationError:
-            api_secret = frappe.generate_hash(length=30)
-            frappe.utils.password.set_encrypted_password("User", email, api_secret, "api_secret")  # FIX HERE
-            frappe.db.commit()
-
+        # 6️⃣ Return success response
         return {
-            "api_key": api_key,
-            "api_secret": api_secret
+            "success": True,
+            "message": "Google authentication successful",
+            "user": user,
+            "email": email,
+            "roles": user_roles,
+            "sid": frappe.session.sid
         }
+
+    except frappe.PermissionError as e:
+        frappe.local.response["http_status_code"] = 403
+        return {"success": False, "error": str(e)}
+
+    except frappe.AuthenticationError as e:
+        frappe.local.response["http_status_code"] = 401
+        return {"success": False, "error": str(e)}
 
     except Exception as e:
         frappe.log_error(f"Google Auth Error: {str(e)}", "Google Login")
-        return {"success": False, "error": "Authentication failed"}
+        frappe.local.response["http_status_code"] = 500
+        return {"success": False, "error": "Authentication failed. Please try again."}
 
 
 # @frappe.whitelist(allow_guest=True)
@@ -1092,32 +1211,51 @@ def get_student_app_data(studentID):
     return response
 
 
+import frappe
+
 ROLE_MAPPING = {
-    "parent": "Guardian",
-    "teacher": "Instructor"
+    "teacher": "Instructor",
+    "parent": "Guardian"
 }
 
 @frappe.whitelist()
-def get_user_details(username, role):
+def get_user_details(username=None, role=None):
+    """
+    Fetch user details for the current session user 
+    based on their validated role (Instructor or Guardian).
+    """
+    # Ensure user is logged in
+    if not frappe.session.user or frappe.session.user == "Guest":
+        frappe.throw("User not logged in", frappe.PermissionError)
 
-    if not frappe.session.user:
-        return {"error": "User not logged in"}
-    username = frappe.session.user
-    print(frappe.session.user)
-    roles = frappe.get_roles(username)
-    print(roles, role)
+    session_user = frappe.session.user
+    roles = frappe.get_roles(session_user)
+    frappe.logger().info(f"👤 Session user: {session_user}, roles: {roles}")
 
-    mapped_role = ROLE_MAPPING.get(role, role)  # map frontend role to Frappe role
+    mapped_role = ROLE_MAPPING.get(role, role)
+    frappe.logger().info(f"Expected role: {mapped_role}")
+
     user_details = None
 
-    if mapped_role in roles:
-        if mapped_role == "Instructor":
-            user_details = get_instructor_app_data(username)
-        elif mapped_role == "Guardian":
-            user_details = get_guardian_app_data(username)
-            print("olleh")
+    # ✅ Explicit checks for role presence
+    if mapped_role == "Instructor" and mapped_role in roles:
+        user_details = get_instructor_app_data(session_user)
+        frappe.logger().info("✅ Instructor data fetched successfully")
+    elif mapped_role == "Guardian" and mapped_role in roles:
+        user_details = get_guardian_app_data(session_user)
+        frappe.logger().info("✅ Guardian data fetched successfully")
+    else:
+        frappe.throw(
+            f"User does not have required role '{mapped_role}'. User roles: {', '.join(roles)}",
+            frappe.PermissionError
+        )
 
-    return {"roles": roles, "user_details": user_details}
+    return {
+        "user": session_user,
+        "roles": roles,
+        "user_details": user_details
+    }
+
 
 
 # @frappe.whitelist()

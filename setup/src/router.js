@@ -35,6 +35,11 @@ const routes = [
         name: 'AddInstructor',
         component: () => import('@/pages/AddInstructor.vue'),
       },
+            {
+        path: 'admin-settings',
+        name: 'AdminSettings',
+        component: () => import('@/pages/AdminSettings.vue'),
+      },
     ]
   },
   {

@@ -14,7 +14,45 @@ from frappe.auth import get_logged_user
 
 #qdsr itqf nmqx zmni
 
+
 import frappe
+from frappe import _
+
+@frappe.whitelist()
+def fetch_admin_settings():
+    """Fetch Admin and System Settings values."""
+    admin_settings = frappe.get_single("Admin Settings")
+    system_settings = frappe.get_single("System Settings")
+
+    return {
+        "allow_instructors_modify_student": admin_settings.update_data,
+        "session_expiry": system_settings.session_expiry or "24:00",
+    }
+
+
+@frappe.whitelist()
+def save_admin_settings(allow_instructors_modify_student=None, session_expiry=None):
+    """Update Admin and System Settings safely."""
+    # Update Admin Settings
+    admin_settings = frappe.get_single("Admin Settings")
+    if allow_instructors_modify_student is not None:
+        admin_settings.update_data = int(bool(allow_instructors_modify_student))
+        admin_settings.save(ignore_permissions=True)
+
+    # Update System Settings
+    if session_expiry is not None:
+        system_settings = frappe.get_single("System Settings")
+        system_settings.session_expiry = str(session_expiry)
+        system_settings.save(ignore_permissions=True)
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "message": _("Settings updated successfully"),
+    }
+
+
 
 @frappe.whitelist(allow_guest=True)
 def create_email_account(email_id, password, append_to=None):

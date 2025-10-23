@@ -56,27 +56,40 @@ const router = createRouter({
 	routes,
 })
 
+// In your router file
+// In your router file
 router.beforeEach(async (to, from, next) => {
-	let isLoggedIn = session.isLoggedIn
-	try {
-		await userResource.promise
-	} catch (error) {
-		isLoggedIn = false
-	}
+  console.log("Route guard: from", from.name, "to", to.name)
+  
+  let isLoggedIn = session.isLoggedIn
+  try {
+    await userResource.promise
+  } catch (error) {
+    isLoggedIn = false
+  }
 
-	if (to.name === "Login" && isLoggedIn) {
-		// Redirect to appropriate home based on selectedLoginRole
-		const routeName = selectedLoginRole === "parent" ? "Parenthome" : "Teacherhome"
-		next({ name: routeName })
-	} else if (to.name !== "Login" && !isLoggedIn) {
-		next({ name: "Login" })
-	} else if (to.name === "Home" && isLoggedIn) {
-		// Redirect home to appropriate dashboard
-		const routeName = selectedLoginRole === "parent" ? "Parenthome" : "Teacherhome"
-		next({ name: routeName })
-	} else {
-		next()
-	}
+  console.log("User is logged in:", isLoggedIn)
+
+  // Define public routes that don't require authentication
+  const publicRoutes = ['Login', 'ForgotPassword', 'OTPLogin', 'SignInScreen', 'TeacherSignup', 'ParentSignup']
+  
+  if (to.name === "Login" && isLoggedIn) {
+    // Redirect to appropriate home based on selectedLoginRole
+    const routeName = selectedLoginRole === "parent" ? "Parenthome" : "Teacherhome"
+    console.log("Redirecting to:", routeName)
+    next({ name: routeName })
+  } else if (!publicRoutes.includes(to.name) && !isLoggedIn) {
+    console.log("User not logged in, redirecting to Login")
+    next({ name: "Login" })
+  } else if (to.name === "Home" && isLoggedIn) {
+    // Redirect home to appropriate dashboard
+    const routeName = selectedLoginRole === "parent" ? "Parenthome" : "Teacherhome"
+    console.log("Redirecting home to:", routeName)
+    next({ name: routeName })
+  } else {
+    console.log("Allowing navigation to:", to.name)
+    next()
+  }
 })
 
 export default router
