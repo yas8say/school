@@ -1,1 +1,0 @@
-import{e as o,o as t,l as e}from"./vendor.706533f0.js";const s={class:"parent-home"},a=e("h1",null,"Welcome to Parent Dashboard!",-1),n=e("p",null,"You are logged in as a parent.",-1),r=[a,n],p={setup(c){return(_,l)=>(t(),o("div",s,r))}};export{p as default};

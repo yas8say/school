@@ -1,5 +1,10 @@
 <template>
   <div class="flex min-h-screen bg-gray-50 flex-col md:flex-row">
+    <!-- Loading State -->
+    <div v-if="userDetailsResource.loading" class="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center z-50">
+      <div class="spinner"></div>
+    </div>
+
     <!-- Mobile Toggle -->
     <div class="md:hidden p-4 bg-white shadow">
       <button
@@ -42,76 +47,82 @@
           v-model="selectedGroup" 
           @change="handleGroupChange" 
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          :disabled="userDetailsResource.loading"
         >
+          <option value="" disabled>Select a class</option>
           <option v-for="(group, index) in studentGroups" :key="index" :value="group">
             {{ group }}
           </option>
         </select>
       </div>
 
-      <!-- Navigation Buttons -->
-      <nav class="space-y-3">
-        <router-link 
-          :to="{ name: 'Attendance' }" 
-          class="block"
-          @click="showSidebar = false"
-        >
-          <button class="w-full text-left px-4 py-3 rounded hover:bg-blue-100 bg-blue-50 text-blue-800 font-medium flex items-center space-x-3">
-            <ClipboardDocumentListIcon class="w-5 h-5" />
-            <span>Take Attendance</span>
-          </button>
-        </router-link>
+      <!-- Navigation Buttons - Fixed Structure -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-medium text-gray-700">Navigation</h3>
+        <nav class="space-y-2">
+          <router-link 
+            :to="{ name: 'Attendance' }" 
+            class="block"
+            @click="showSidebar = false"
+          >
+            <div class="w-full text-left px-4 py-3 rounded hover:bg-blue-100 bg-blue-50 text-blue-800 font-medium flex items-center space-x-3 transition-colors">
+              <ClipboardDocumentListIcon class="w-5 h-5" />
+              <span>Take Attendance</span>
+            </div>
+          </router-link>
 
-        <router-link 
-          :to="{ name: 'AttendanceRecord' }" 
-          class="block"
-          @click="showSidebar = false"
-        >
-          <button class="w-full text-left px-4 py-3 rounded hover:bg-green-100 bg-green-50 text-green-800 font-medium flex items-center space-x-3">
-            <UserGroupIcon class="w-5 h-5" />
-            <span>Student Record</span>
-          </button>
-        </router-link>
+          <router-link 
+            :to="{ name: 'AttendanceRecord' }" 
+            class="block"
+            @click="showSidebar = false"
+          >
+            <div class="w-full text-left px-4 py-3 rounded hover:bg-green-100 bg-green-50 text-green-800 font-medium flex items-center space-x-3 transition-colors">
+              <UserGroupIcon class="w-5 h-5" />
+              <span>Student Record</span>
+            </div>
+          </router-link>
 
-        <router-link 
-          :to="{ name: 'CreateNotice' }" 
-          class="block"
-          @click="showSidebar = false"
-        >
-          <button class="w-full text-left px-4 py-3 rounded hover:bg-yellow-100 bg-yellow-50 text-yellow-800 font-medium flex items-center space-x-3">
-            <PlusCircleIcon class="w-5 h-5" />
-            <span>Create Notice</span>
-          </button>
-        </router-link>
+          <router-link 
+            :to="{ name: 'CreateNotice' }" 
+            class="block"
+            @click="showSidebar = false"
+          >
+            <div class="w-full text-left px-4 py-3 rounded hover:bg-yellow-100 bg-yellow-50 text-yellow-800 font-medium flex items-center space-x-3 transition-colors">
+              <PlusCircleIcon class="w-5 h-5" />
+              <span>Create Notice</span>
+            </div>
+          </router-link>
 
-        <router-link 
-          :to="{ name: 'PreviousNotices' }" 
-          class="block"
-          @click="showSidebar = false"
-        >
-          <button class="w-full text-left px-4 py-3 rounded hover:bg-purple-100 bg-purple-50 text-purple-800 font-medium flex items-center space-x-3">
-            <DocumentTextIcon class="w-5 h-5" />
-            <span>Previous Notices</span>
-          </button>
-        </router-link>
+          <router-link 
+            :to="{ name: 'PreviousNotices' }" 
+            class="block"
+            @click="showSidebar = false"
+          >
+            <div class="w-full text-left px-4 py-3 rounded hover:bg-purple-100 bg-purple-50 text-purple-800 font-medium flex items-center space-x-3 transition-colors">
+              <DocumentTextIcon class="w-5 h-5" />
+              <span>Previous Notices</span>
+            </div>
+          </router-link>
 
-        <router-link 
-          :to="{ name: 'BrowseLeaveAppeals' }" 
-          class="block"
-          @click="showSidebar = false"
-        >
-          <button class="w-full text-left px-4 py-3 rounded hover:bg-indigo-100 bg-indigo-50 text-indigo-800 font-medium flex items-center space-x-3">
-            <InboxIcon class="w-5 h-5" />
-            <span>Browse Leave Appeals</span>
-          </button>
-        </router-link>
-      </nav>
+          <router-link 
+            :to="{ name: 'BrowseLeaveAppeals' }" 
+            class="block"
+            @click="showSidebar = false"
+          >
+            <div class="w-full text-left px-4 py-3 rounded hover:bg-indigo-100 bg-indigo-50 text-indigo-800 font-medium flex items-center space-x-3 transition-colors">
+              <InboxIcon class="w-5 h-5" />
+              <span>Browse Leave Appeals</span>
+            </div>
+          </router-link>
+        </nav>
+      </div>
 
       <!-- Logout Button -->
       <div class="pt-4 border-t">
         <button
-          class="w-full px-4 py-3 rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 flex items-center justify-center space-x-2"
+          class="w-full px-4 py-3 rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 flex items-center justify-center space-x-2 transition-colors"
           @click="handleLogout"
+          :disabled="userDetailsResource.loading"
         >
           <ArrowRightOnRectangleIcon class="w-5 h-5" />
           <span>Logout</span>
@@ -192,9 +203,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { session } from '@/data/session'
+import { createResource } from 'frappe-ui'
 
 // Import Heroicons
 import {
@@ -211,10 +223,45 @@ const router = useRouter()
 
 // Reactive state
 const teacher = ref({})
-const loading = ref(true)
 const studentGroups = ref([])
 const selectedGroup = ref('')
 const showSidebar = ref(false)
+
+// Get current user and role
+const currentUser = session.user
+const currentRole = 'teacher'
+
+// Create resource for API call
+const userDetailsResource = createResource({
+  url: 'school.al_ummah.api2.get_user_details',
+  params: { 
+    role: currentRole,
+    username: currentUser
+  },
+  auto: true,
+  onSuccess(data) {
+    console.log('User details loaded:', data)
+    
+    if (data && data.user_details) {
+      teacher.value = {
+        name: data.user_details.name,
+        image: data.user_details.base64profile,
+      }
+
+      if (data.user_details.student_groups?.length) {
+        studentGroups.value = data.user_details.student_groups
+        selectedGroup.value = data.user_details.student_groups[0]
+        localStorage.setItem('selected_student_group', data.user_details.student_groups[0])
+      }
+
+      localStorage.setItem('user_details', JSON.stringify(data.user_details))
+    }
+  },
+  onError(error) {
+    console.error('Error loading user details:', error)
+    loadUserDetailsFromLocalStorage()
+  }
+})
 
 // Computed properties
 const currentDate = computed(() => {
@@ -226,33 +273,23 @@ const currentDate = computed(() => {
   })
 })
 
-// Load user details from localStorage
-const loadUserDetails = async () => {
+// Fallback to localStorage if API fails
+const loadUserDetailsFromLocalStorage = () => {
   try {
     const userDetailsData = localStorage.getItem('user_details')
     if (userDetailsData) {
       const userDetails = JSON.parse(userDetailsData)
-
-      // Update teacher state
       teacher.value = {
         name: userDetails.name,
         image: userDetails.base64profile,
       }
-
-      // Set student groups
       if (userDetails.student_groups?.length) {
         studentGroups.value = userDetails.student_groups
-        selectedGroup.value = userDetails.student_groups[0] // Default to first group
-        localStorage.setItem('selected_student_group', userDetails.student_groups[0])
+        selectedGroup.value = userDetails.student_groups[0]
       }
-    } else {
-      alert('No user details found.')
     }
   } catch (error) {
-    console.error('Error loading user details:', error)
-    alert('Failed to load user details.')
-  } finally {
-    loading.value = false
+    console.error('Error loading from localStorage:', error)
   }
 }
 
@@ -264,32 +301,47 @@ const handleGroupChange = async () => {
 // Handle logout
 const handleLogout = async () => {
   try {
-    // Clear localStorage
     localStorage.removeItem('user_details')
     localStorage.removeItem('user')
     localStorage.removeItem('selected_student_group')
-    
-    // Logout from session
     await session.logout.submit()
-    
-    // Redirect to login
     router.push({ name: 'Login' })
   } catch (error) {
     console.error('Logout error:', error)
-    // Force redirect even if logout fails
     localStorage.clear()
     router.push({ name: 'Login' })
   }
 }
 
-// Load user details on component mount
 onMounted(() => {
-  loadUserDetails()
+  if (!userDetailsResource.data) {
+    userDetailsResource.reload()
+  }
+})
+
+watch(() => userDetailsResource.loading, (loading) => {
+  if (!loading && userDetailsResource.data) {
+    console.log('Data loaded successfully')
+  }
 })
 </script>
 
 <style scoped>
-.router-link-active button {
-  @apply bg-blue-100 border-blue-200;
+.router-link-active div {
+  @apply bg-blue-100 border border-blue-200;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

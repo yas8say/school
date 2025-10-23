@@ -1,0 +1,1 @@
+import{_ as s,e,o as t,l as o}from"./vendor.3821638a.js";const n={},r={class:"forgot-password"},c=o("h1",null,"Forgot Password",-1),a=o("p",null,"Password reset functionality coming soon...",-1),_=[c,a];function d(i,l){return t(),e("div",r,_)}var h=s(n,[["render",d]]);export{h as default};

@@ -1097,9 +1097,10 @@ ROLE_MAPPING = {
 
 @frappe.whitelist()
 def get_user_details(username, role):
+
     if not frappe.session.user:
         return {"error": "User not logged in"}
-
+    username = frappe.session.user
     print(frappe.session.user)
     roles = frappe.get_roles(username)
     print(roles, role)
@@ -1110,7 +1111,7 @@ def get_user_details(username, role):
     if mapped_role in roles:
         if mapped_role == "Instructor":
             user_details = get_instructor_app_data(username)
-            print("hello")
+            print(user_details)
         elif mapped_role == "Guardian":
             user_details = get_guardian_app_data(username)
             print("olleh")
