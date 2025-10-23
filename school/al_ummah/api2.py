@@ -25,6 +25,9 @@ from frappe.auth import LoginManager
 
 
 
+import frappe
+from frappe.auth import LoginManager
+
 @frappe.whitelist(allow_guest=True)
 def login(usr, pwd, role=None):
     """
@@ -34,18 +37,18 @@ def login(usr, pwd, role=None):
     print(f"Received usr: {usr}, role: {role}")
 
     try:
-        # Resolve user from mobile/email
+        # Resolve user from mobile or email
         user = frappe.db.get_value("User", {"mobile_no": usr}, "name") \
                or frappe.db.get_value("User", {"email": usr}, "name")
         
         if not user:
-            return {"status": "fail", "message": "User not found"}
+            frappe.throw("User not found", frappe.AuthenticationError)
 
         print("Resolved user:", user)
 
-        # Use LoginManager for proper authentication
+        # Authenticate using LoginManager
         login_manager = LoginManager()
-        login_manager.authenticate(user=user, pwd=pwd)  # Handles password check
+        login_manager.authenticate(user=user, pwd=pwd)  # Raises AuthenticationError if invalid
         
         # Get user roles
         user_roles = frappe.get_roles(user)
@@ -54,32 +57,31 @@ def login(usr, pwd, role=None):
         # Validate role if provided
         if role:
             required_role = "Guardian" if role == "Guardian" else "Instructor"
-            
             if required_role not in user_roles:
-                return {
-                    "status": "fail", 
-                    "message": f"User does not have {required_role} role. User has roles: {', '.join(user_roles)}"
-                }
+                frappe.throw(
+                    f"User does not have {required_role} role. User has roles: {', '.join(user_roles)}",
+                    frappe.PermissionError
+                )
 
         # Create session
         login_manager.post_login()
-        
+
         print("✅ Login successful:", frappe.session.user)
         return {
             "status": "success",
             "user": user,
             "role": role,
-            "user_roles": user_roles,  # Return roles to frontend
+            "user_roles": user_roles,
             "sid": frappe.session.sid,
             "message": "Logged In"
         }
 
-    except frappe.AuthenticationError as e:
-        print("❌ Authentication failed")
-        return {"status": "fail", "message": "Invalid credentials"}
+    except frappe.AuthenticationError:
+        frappe.throw("Invalid credentials", frappe.AuthenticationError)
+
     except Exception as e:
-        print("❌ Login error:", str(e))
-        return {"status": "error", "message": str(e)}
+        frappe.throw(f"Unexpected error: {str(e)}", frappe.ValidationError)
+
 
 
 
@@ -1111,12 +1113,10 @@ def get_user_details(username, role):
     if mapped_role in roles:
         if mapped_role == "Instructor":
             user_details = get_instructor_app_data(username)
-            print(user_details)
         elif mapped_role == "Guardian":
             user_details = get_guardian_app_data(username)
             print("olleh")
 
-    print(user_details)
     return {"roles": roles, "user_details": user_details}
 
 
@@ -1294,14 +1294,13 @@ def get_instructor_app_data(teacherID):
 
     # Convert the profile image to base64 if available
     base64image = convert_image_to_base64(profile) if profile else None
-
+    # print(base64image)
     # Add teacher info to response
     response = {
         "name": instructor_doc.instructor_name,
         "base64profile": base64image,
         "student_groups": student_groups,
     }
-    print(response)
     return response
 
 
@@ -1424,42 +1423,56 @@ def mark_attendance(
     :param student_group: Student Group.
     :param date: Date.
     """
-    # print(students_absent)
-    # print(students_present)
-    date = getdate()
-    if student_group:
-        academic_year = frappe.db.get_value("Student Group", student_group, "academic_year")
-        if academic_year:
-            year_start_date, year_end_date = frappe.db.get_value(
-                "Academic Year", academic_year, ["year_start_date", "year_end_date"]
-            )
-            if getdate(date) < getdate(year_start_date) or getdate(date) > getdate(
-                year_end_date
-            ):
-                frappe.throw(
-                    _("Attendance cannot be marked outside of Academic Year {0}").format(academic_year)
+    try:
+        date = getdate()
+        if student_group:
+            academic_year = frappe.db.get_value("Student Group", student_group, "academic_year")
+            if academic_year:
+                year_start_date, year_end_date = frappe.db.get_value(
+                    "Academic Year", academic_year, ["year_start_date", "year_end_date"]
                 )
+                if getdate(date) < getdate(year_start_date) or getdate(date) > getdate(
+                    year_end_date
+                ):
+                    frappe.throw(
+                        _("Attendance cannot be marked outside of Academic Year {0}").format(academic_year)
+                    )
 
-    present = json.loads(students_present)
-    absent = json.loads(students_absent)
+        present = json.loads(students_present)
+        absent = json.loads(students_absent)
 
-    for d in present:
-        make_attendance_records(
-            d["student"], d["student_name"], "Present", course_schedule, student_group, date
-        )
+        for d in present:
+            make_attendance_records(
+                d["student"], d["student_name"], "Present", course_schedule, student_group, date
+            )
 
-    student_list = []
-    for d in absent:
-        student_list.append(d["student"])
-        make_attendance_records(
-            d["student"], d["student_name"], "Absent", course_schedule, student_group, date
-        )
-    print(student_list)
-    frappe.db.commit()
-    frappe.msgprint(_("Attendance has been marked successfully."))
-    
-    # Send push notifications to parents of absent students
-    send_notification_to_app(student_list)
+        student_list = []
+        for d in absent:
+            student_list.append(d["student"])
+            make_attendance_records(
+                d["student"], d["student_name"], "Absent", course_schedule, student_group, date
+            )
+        
+        frappe.db.commit()
+        
+        # Send push notifications to parents of absent students
+        send_notification_to_app(student_list)
+        
+        # Return structured JSON response instead of using msgprint
+        return {
+            "message": "Attendance has been marked successfully.",
+            "present_count": len(present),
+            "absent_count": len(absent),
+            "status": "success"
+        }
+        
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(f"Attendance marking failed: {str(e)}")
+        return {
+            "message": f"Failed to mark attendance: {str(e)}",
+            "status": "error"
+        }
     
 import frappe
 from frappe import _
@@ -2092,7 +2105,7 @@ import base64
 def convert_image_to_base64(image_url):
     # Replace https with http and append :8000
     base_url = frappe.utils.get_url().replace("https://", "http://")
-    print(f"Using base URL: {base_url}")
+    # print(f"Using base URL: {base_url}")
 
     if not image_url.startswith('http'):
         image_url = base_url + image_url

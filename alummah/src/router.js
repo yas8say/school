@@ -48,37 +48,7 @@ const routes = [
 		path: "/parent/signup",
 		component: () => import("@/pages/ParentSignup.vue"),
 	},
-	// New routes for teacher navigation
-	{
-		name: "Attendance",
-		path: "/attendance",
-		component: () => import("@/pages/Attendance.vue"),
-	},
-	{
-		name: "AttendanceRecord",
-		path: "/attendance-record", 
-		component: () => import("@/pages/AttendanceRecord.vue"),
-	},
-	{
-		name: "CreateNotice",
-		path: "/create-notice",
-		component: () => import("@/pages/CreateNotice.vue"),
-	},
-	{
-		name: "PreviousNotices",
-		path: "/previous-notices",
-		component: () => import("@/pages/PreviousNotices.vue"),
-	},
-	{
-		name: "BrowseLeaveAppeals",
-		path: "/browse-leave-appeals",
-		component: () => import("@/pages/BrowseLeaveAppeals.vue"),
-	},
-	{
-		name: "AppealLeave", 
-		path: "/appeal-leave",
-		component: () => import("@/pages/AppealLeave.vue"),
-	},
+	// REMOVED: All the component routes since they're now embedded in TeacherHome/ParentHome
 ]
 
 const router = createRouter({

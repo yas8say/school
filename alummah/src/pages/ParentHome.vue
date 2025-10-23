@@ -24,19 +24,21 @@
       ]"
     >
       <!-- Parent Info Card -->
-      <div class="flex items-center space-x-4 border-b pb-4">
-        <div class="w-16 h-16 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
+      <div class="flex items-start space-x-4 border-b pb-4">
+        <div class="flex-shrink-0 w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
           <img
             v-if="parent.image"
             :src="`data:image/jpeg;base64,${parent.image}`"
             alt="Parent"
             class="object-cover w-full h-full"
           />
-          <span v-else class="text-sm text-gray-500">No Image</span>
+          <div v-else class="w-full h-full flex items-center justify-center">
+            <span class="text-sm text-gray-500">No Image</span>
+          </div>
         </div>
-        <div>
-          <h2 class="text-xl font-semibold text-gray-800">{{ parent.name || 'No Name Available' }}</h2>
-          <p class="text-sm text-gray-500">Parent</p>
+        <div class="min-w-0 flex-1">
+          <h2 class="text-xl font-semibold text-gray-800 break-words">{{ parent.name || 'No Name Available' }}</h2>
+          <p class="text-sm text-gray-500 mt-1">Parent</p>
         </div>
       </div>
 
@@ -57,43 +59,62 @@
       </div>
 
       <!-- Navigation Buttons -->
-      <nav class="space-y-3">
+      <div class="space-y-3">
         <h3 class="text-sm font-medium text-gray-700">Navigation</h3>
-        <div class="space-y-2">
-          <router-link 
-            :to="{ name: 'AttendanceRecord' }" 
-            class="block"
-            @click="showSidebar = false"
+        <nav class="space-y-2">
+          <button
+            @click="setActiveView('dashboard')"
+            :class="[
+              'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors',
+              activeView === 'dashboard' 
+                ? 'bg-blue-100 border border-blue-200 text-blue-800' 
+                : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+            ]"
           >
-            <div class="w-full text-left px-4 py-3 rounded hover:bg-blue-100 bg-blue-50 text-blue-800 font-medium flex items-center space-x-3 transition-colors">
-              <ClipboardDocumentListIcon class="w-5 h-5" />
-              <span>Attendance Record</span>
-            </div>
-          </router-link>
+            <HomeIcon class="w-5 h-5" />
+            <span>Dashboard</span>
+          </button>
 
-          <router-link 
-            :to="{ name: 'PreviousNotices' }" 
-            class="block"
-            @click="showSidebar = false"
+          <button
+            @click="setActiveView('attendance-record')"
+            :class="[
+              'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors',
+              activeView === 'attendance-record' 
+                ? 'bg-blue-100 border border-blue-200 text-blue-800' 
+                : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+            ]"
           >
-            <div class="w-full text-left px-4 py-3 rounded hover:bg-green-100 bg-green-50 text-green-800 font-medium flex items-center space-x-3 transition-colors">
-              <DocumentTextIcon class="w-5 h-5" />
-              <span>Browse Notices</span>
-            </div>
-          </router-link>
+            <ClipboardDocumentListIcon class="w-5 h-5" />
+            <span>Attendance Record</span>
+          </button>
 
-          <router-link 
-            :to="{ name: 'AppealLeave' }" 
-            class="block"
-            @click="showSidebar = false"
+          <button
+            @click="setActiveView('browse-notices')"
+            :class="[
+              'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors',
+              activeView === 'browse-notices' 
+                ? 'bg-green-100 border border-green-200 text-green-800' 
+                : 'bg-green-50 text-green-800 hover:bg-green-100'
+            ]"
           >
-            <div class="w-full text-left px-4 py-3 rounded hover:bg-yellow-100 bg-yellow-50 text-yellow-800 font-medium flex items-center space-x-3 transition-colors">
-              <InboxIcon class="w-5 h-5" />
-              <span>Appeal Leave</span>
-            </div>
-          </router-link>
-        </div>
-      </nav>
+            <DocumentTextIcon class="w-5 h-5" />
+            <span>Browse Notices</span>
+          </button>
+
+          <button
+            @click="setActiveView('appeal-leave')"
+            :class="[
+              'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors',
+              activeView === 'appeal-leave' 
+                ? 'bg-yellow-100 border border-yellow-200 text-yellow-800' 
+                : 'bg-yellow-50 text-yellow-800 hover:bg-yellow-100'
+            ]"
+          >
+            <InboxIcon class="w-5 h-5" />
+            <span>Appeal Leave</span>
+          </button>
+        </nav>
+      </div>
 
       <!-- Logout Button -->
       <div class="pt-4 border-t">
@@ -108,73 +129,100 @@
       </div>
     </aside>
 
-    <!-- Main Content -->
+    <!-- Main Content Area - Dynamic based on active view -->
     <main class="flex-1 p-4 md:p-8 bg-gray-50">
-      <!-- Welcome Section -->
-      <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome, {{ parent.name || 'Parent' }}!</h1>
-        <p class="text-gray-600">Monitor your child's activities and school records from here.</p>
+      <!-- Dashboard View -->
+      <div v-if="activeView === 'dashboard'">
+        <!-- Welcome Section -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome, {{ parent.name || 'Parent' }}!</h1>
+          <p class="text-gray-600">Monitor your child's activities and school records from here.</p>
+        </div>
+
+        <!-- Quick Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-600">Selected Child</p>
+                <p class="text-2xl font-bold text-gray-800">{{ selectedStudent?.student_name || 'None' }}</p>
+              </div>
+              <UserGroupIcon class="w-8 h-8 text-blue-500" />
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-600">Available Children</p>
+                <p class="text-2xl font-bold text-gray-800">{{ studentList.length }}</p>
+              </div>
+              <UserGroupIcon class="w-8 h-8 text-green-500" />
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-600">Today's Date</p>
+                <p class="text-2xl font-bold text-gray-800">{{ currentDate }}</p>
+              </div>
+              <CalendarIcon class="w-8 h-8 text-purple-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button 
+              @click="setActiveView('attendance-record')"
+              class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              <ClipboardDocumentListIcon class="w-6 h-6 text-blue-600 mr-3" />
+              <div>
+                <h3 class="font-medium text-gray-800">View Attendance Record</h3>
+                <p class="text-sm text-gray-600">Check your child's attendance history</p>
+              </div>
+            </button>
+
+            <button 
+              @click="setActiveView('appeal-leave')"
+              class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-yellow-500 hover:bg-yellow-50 transition-colors cursor-pointer"
+            >
+              <InboxIcon class="w-6 h-6 text-yellow-600 mr-3" />
+              <div>
+                <h3 class="font-medium text-gray-800">Appeal for Leave</h3>
+                <p class="text-sm text-gray-600">Submit leave appeal for your child</p>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- Quick Stats Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-gray-600">Selected Child</p>
-              <p class="text-2xl font-bold text-gray-800">{{ selectedStudent?.student_name || 'None' }}</p>
-            </div>
-            <UserGroupIcon class="w-8 h-8 text-blue-500" />
-          </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-gray-600">Available Children</p>
-              <p class="text-2xl font-bold text-gray-800">{{ studentList.length }}</p>
-            </div>
-            <UserGroupIcon class="w-8 h-8 text-green-500" />
-          </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-purple-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-gray-600">Today's Date</p>
-              <p class="text-2xl font-bold text-gray-800">{{ currentDate }}</p>
-            </div>
-            <CalendarIcon class="w-8 h-8 text-purple-500" />
-          </div>
-        </div>
+      <!-- Attendance Record View -->
+      <div v-else-if="activeView === 'attendance-record'">
+        <AttendanceRecord 
+          :selected-student="selectedStudent"
+          @back-to-dashboard="setActiveView('dashboard')"
+        />
       </div>
 
-      <!-- Quick Actions -->
-      <div class="bg-white rounded-lg shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <router-link 
-            :to="{ name: 'AttendanceRecord' }"
-            class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-          >
-            <ClipboardDocumentListIcon class="w-6 h-6 text-blue-600 mr-3" />
-            <div>
-              <h3 class="font-medium text-gray-800">View Attendance Record</h3>
-              <p class="text-sm text-gray-600">Check your child's attendance history</p>
-            </div>
-          </router-link>
+      <!-- Browse Notices View -->
+      <div v-else-if="activeView === 'browse-notices'">
+        <BrowseNotices 
+          :selected-student="selectedStudent"
+          @back-to-dashboard="setActiveView('dashboard')"
+        />
+      </div>
 
-          <router-link 
-            :to="{ name: 'AppealLeave' }"
-            class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-yellow-500 hover:bg-yellow-50 transition-colors"
-          >
-            <InboxIcon class="w-6 h-6 text-yellow-600 mr-3" />
-            <div>
-              <h3 class="font-medium text-gray-800">Appeal for Leave</h3>
-              <p class="text-sm text-gray-600">Submit leave appeal for your child</p>
-            </div>
-          </router-link>
-        </div>
+      <!-- Appeal Leave View -->
+      <div v-else-if="activeView === 'appeal-leave'">
+        <AppealLeave 
+          :selected-student="selectedStudent"
+          @back-to-dashboard="setActiveView('dashboard')"
+        />
       </div>
     </main>
   </div>
@@ -188,6 +236,7 @@ import { createResource } from 'frappe-ui'
 
 // Import Heroicons
 import {
+  HomeIcon,
   ClipboardDocumentListIcon,
   UserGroupIcon,
   DocumentTextIcon,
@@ -196,6 +245,11 @@ import {
   CalendarIcon
 } from '@heroicons/vue/24/outline'
 
+// Import Components
+import AttendanceRecord from '@/components/AttendanceRecord.vue'
+import BrowseNotices from '@/components/BrowseNotices.vue'
+import AppealLeave from '@/components/AppealLeave.vue'
+
 const router = useRouter()
 
 // Reactive state
@@ -203,6 +257,15 @@ const parent = ref({})
 const studentList = ref([])
 const selectedStudent = ref(null)
 const showSidebar = ref(false)
+const activeView = ref('dashboard') // Default to dashboard
+
+// Set active view function
+const setActiveView = (view) => {
+  activeView.value = view
+  if (window.innerWidth < 768) {
+    showSidebar.value = false
+  }
+}
 
 // Get current user and role
 const currentUser = session.user
@@ -316,10 +379,6 @@ watch(() => userDetailsResource.loading, (loading) => {
 </script>
 
 <style scoped>
-.router-link-active div {
-  @apply bg-blue-100 border border-blue-200;
-}
-
 .spinner {
   width: 40px;
   height: 40px;
