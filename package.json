@@ -4,19 +4,17 @@
   "description": "School",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-
-    "postinstall": "yarn setup:install && yarn instructor:install",
-    "dev": "yarn setup:dev & yarn instructor:dev",
-    "build": "yarn setup:build && yarn instructor:build",
+    "postinstall": "yarn setup:install && yarn alummah:install",
+    "dev": "yarn setup:dev & yarn alummah:dev",
+    "build": "yarn setup:build && yarn alummah:build",
 
     "setup:install": "cd setup && yarn install",
     "setup:dev": "cd setup && yarn dev",
     "setup:build": "cd setup && yarn build",
 
-    "instructor:install": "cd instructor-portal && yarn install",
-    "instructor:dev": "cd instructor-portal && yarn dev",
-    "instructor:build": "cd instructor-portal && yarn build"
+    "alummah:install": "cd alummah && yarn install",
+    "alummah:dev": "cd alummah && yarn dev",
+    "alummah:build": "cd alummah && yarn build"
   },
   "keywords": [],
   "author": "",

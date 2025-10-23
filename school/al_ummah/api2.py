@@ -17,11 +17,71 @@ import frappe
 import frappe
 import requests
 
-import frappe
 import base64
 from frappe.utils.file_manager import save_file
 
-import requests
+import frappe
+from frappe.auth import LoginManager
+
+
+
+@frappe.whitelist(allow_guest=True)
+def login(usr, pwd, role=None):
+    """
+    Custom login API with role validation
+    """
+    print("=== login API called ===")
+    print(f"Received usr: {usr}, role: {role}")
+
+    try:
+        # Resolve user from mobile/email
+        user = frappe.db.get_value("User", {"mobile_no": usr}, "name") \
+               or frappe.db.get_value("User", {"email": usr}, "name")
+        
+        if not user:
+            return {"status": "fail", "message": "User not found"}
+
+        print("Resolved user:", user)
+
+        # Use LoginManager for proper authentication
+        login_manager = LoginManager()
+        login_manager.authenticate(user=user, pwd=pwd)  # Handles password check
+        
+        # Get user roles
+        user_roles = frappe.get_roles(user)
+        print("User roles:", user_roles)
+
+        # Validate role if provided
+        if role:
+            required_role = "Guardian" if role == "Guardian" else "Instructor"
+            
+            if required_role not in user_roles:
+                return {
+                    "status": "fail", 
+                    "message": f"User does not have {required_role} role. User has roles: {', '.join(user_roles)}"
+                }
+
+        # Create session
+        login_manager.post_login()
+        
+        print("✅ Login successful:", frappe.session.user)
+        return {
+            "status": "success",
+            "user": user,
+            "role": role,
+            "user_roles": user_roles,  # Return roles to frontend
+            "sid": frappe.session.sid,
+            "message": "Logged In"
+        }
+
+    except frappe.AuthenticationError as e:
+        print("❌ Authentication failed")
+        return {"status": "fail", "message": "Invalid credentials"}
+    except Exception as e:
+        print("❌ Login error:", str(e))
+        return {"status": "error", "message": str(e)}
+
+
 
 def send_push_message(token, title, body, extra=None):
     headers = {

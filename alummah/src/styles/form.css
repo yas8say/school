@@ -1,0 +1,280 @@
+/* src/styles/form.css */
+
+/* ===== Base Styles ===== */
+.container {
+  max-width: 400px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+/* ===== Welcome Screen ===== */
+.welcome-section {
+  text-align: center;
+}
+
+.heading {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 30px;
+  color: #1f2937;
+}
+
+.role-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 25px 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.role-card:hover {
+  border-color: #3b82f6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.role-image {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  margin-bottom: 12px;
+}
+
+.role-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* ===== Login Form ===== */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #1f2937;
+  text-align: center;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: #374151;
+  font-weight: 500;
+}
+
+input {
+  padding: 12px;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ===== Password Field ===== */
+.password-container {
+  position: relative;
+  width: 100%;
+}
+
+.password-container input {
+  padding-right: 50px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: #6b7280;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.password-toggle:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* ===== Buttons ===== */
+.login-btn {
+  padding: 12px;
+  font-size: 14px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.login-btn:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* ===== Form Actions ===== */
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.secondary-btn {
+  padding: 10px;
+  font-size: 14px;
+  background-color: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-btn:hover {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.text-btn {
+  padding: 10px;
+  font-size: 14px;
+  background: none;
+  color: #3b82f6;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  border-radius: 12px;
+}
+
+.text-btn:hover {
+  color: #2563eb;
+  background-color: #f3f4f6;
+}
+
+/* ===== Alternative Options ===== */
+.alternative-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.outline-btn {
+  padding: 10px;
+  font-size: 14px;
+  background-color: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.outline-btn:hover {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* ===== Signup Section ===== */
+.signup-section {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 20px;
+  margin-top: 10px;
+}
+
+.success-btn {
+  padding: 12px;
+  font-size: 14px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+  width: 100%;
+}
+
+.success-btn:hover {
+  background-color: #059669;
+}
+
+/* ===== Responsive Design ===== */
+@media (max-width: 480px) {
+  .container {
+    margin: 20px auto;
+    padding: 15px;
+  }
+  
+  .role-selection {
+    gap: 12px;
+  }
+  
+  .role-card {
+    padding: 20px 15px;
+  }
+  
+  .role-image {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .form-actions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  input {
+    border-radius: 10px;
+  }
+  
+  .login-btn,
+  .secondary-btn,
+  .outline-btn,
+  .success-btn {
+    border-radius: 10px;
+  }
+}

@@ -6,7 +6,7 @@
           required
           name="email"
           type="text"
-          placeholder="johndoe@email.com"
+          placeholder="johnwick@email.com"
           label="User ID"
         />
         <Input

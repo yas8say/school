@@ -245,4 +245,7 @@ override_response_cookies = "school.al_ummah.api3.override_response_cookies"
 # }
 
 
-website_route_rules = [{'from_route': '/instructor-portal/<path:app_path>', 'to_route': 'instructor-portal'}, {'from_route': '/frontend/<path:app_path>', 'to_route': 'frontend'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup1/<path:app_path>', 'to_route': 'setup1'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/setup/<path:app_path>', 'to_route': 'setup'}, {'from_route': '/frontend/<path:app_path>', 'to_route': 'frontend'}, {'from_route': '/setup-app/<path:app_path>', 'to_route': 'setup-app'},]
+website_route_rules = [
+    {"from_route": "/alummah/<path:app_path>", "to_route": "alummah"},
+    {"from_route": "/setup/<path:app_path>", "to_route": "setup"},
+]

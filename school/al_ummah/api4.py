@@ -636,6 +636,7 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
             user_doc.username = f"{first_name.lower()}{phone}".replace(" ", "")
             user_doc.mobile_no = phone
             user_doc.date_birth = date_of_birth
+            user_doc.new_password = password
             user_doc.send_welcome_email = 0
             user_doc.enabled = 1
             user_doc.user_type = "Website User"
