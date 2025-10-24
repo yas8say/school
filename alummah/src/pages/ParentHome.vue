@@ -76,10 +76,10 @@
           </button>
 
           <button
-            @click="setActiveView('attendance-record')"
+            @click="setActiveView('attendance-info')"
             :class="[
               'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors',
-              activeView === 'attendance-record' 
+              activeView === 'attendance-info' 
                 ? 'bg-blue-100 border border-blue-200 text-blue-800' 
                 : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
             ]"
@@ -177,7 +177,7 @@
           <h2 class="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button 
-              @click="setActiveView('attendance-record')"
+              @click="setActiveView('attendance-info')"
               class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
             >
               <ClipboardDocumentListIcon class="w-6 h-6 text-blue-600 mr-3" />
@@ -202,8 +202,8 @@
       </div>
 
       <!-- Attendance Record View -->
-      <div v-else-if="activeView === 'attendance-record'">
-        <AttendanceRecord 
+      <div v-else-if="activeView === 'attendance-info'">
+        <AttendanceInfo 
           :selected-student="selectedStudent"
           @back-to-dashboard="setActiveView('dashboard')"
         />
@@ -246,7 +246,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 // Import Components
-import AttendanceRecord from '@/components/AttendanceRecord.vue'
+import AttendanceInfo from '@/components/AttendanceInfo.vue'
 import BrowseNotices from '@/components/BrowseNotices.vue'
 import AppealLeave from '@/components/AppealLeave.vue'
 

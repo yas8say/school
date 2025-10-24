@@ -11,21 +11,21 @@ from frappe.utils.dateutils import get_dates_from_timegrain
 from frappe.model.document import Document
 from frappe.utils.file_manager import save_file
 
-import frappe
 
 
-import frappe
+
+
 import requests
 
 import base64
 from frappe.utils.file_manager import save_file
 
-import frappe
+
 from frappe.auth import LoginManager
 
 
 
-import frappe
+
 from frappe.auth import LoginManager
 
 @frappe.whitelist(allow_guest=True)
@@ -281,9 +281,58 @@ def create_user_and_instructor(email, first_name, phone, password, role, gender,
         frappe.log_error(f"Instructor creation failed: {str(e)}", "create_user_and_instructor")
         return
 
+@frappe.whitelist()
+def get_student_details(student):
+    """
+    Returns Student details along with a list of their Guardians, including contact info
+    and additional details like Email, Occupation, Designation, Work Address, Education, and DOB.
+    """
+    # 1️⃣ Fetch Student document
+    student_doc = frappe.get_doc("Student", student)
+    
+    student_info = {
+        "student": student_doc.name,
+        "first_name": student_doc.first_name,
+        "middle_name": getattr(student_doc, "middle_name", None),
+        "last_name": student_doc.last_name,
+        "student_date_of_birth": getattr(student_doc, "date_of_birth", getattr(student_doc, "student_date_of_birth", None)),
+        "gr_number": getattr(student_doc, "gr_number", None),
+        "email_address": getattr(student_doc, "student_email_id", None),
+        "phone_number": getattr(student_doc, "student_mobile_number", None),
+        "roll_number": getattr(student_doc, "roll_number", None)
+    }
 
-import frappe
+    # 2️⃣ Fetch all linked Guardians
+    guardians = frappe.get_all(
+        "Student Guardian", 
+        fields=["guardian_name", "guardian", "relation"], 
+        filters={"parent": student}
+    )
+    
+    guardian_list = []
+    for guardian in guardians:
+        guardian_doc = frappe.get_doc("Guardian", guardian.get("guardian"))
 
+        guardian_info = {
+            "guardian": guardian.get("guardian"),  # Guardian ID
+            "guardian_name": guardian.get("guardian_name"),
+            "relation": guardian.get("relation"),
+            "mobile_number": getattr(guardian_doc, "mobile_number", None),
+            "email": getattr(guardian_doc, "email_address", None),
+            "occupation": getattr(guardian_doc, "occupation", None),
+            "designation": getattr(guardian_doc, "designation", None),
+            "work_address": getattr(guardian_doc, "work_address", None),
+            "education": getattr(guardian_doc, "education", None),
+            "date_of_birth": getattr(guardian_doc, "date_of_birth", None)
+        }
+
+        guardian_list.append(guardian_info)
+    
+    # 3️⃣ Return combined response
+    return {
+        "student_info": student_info,
+        "guardians": guardian_list
+    }
 
 @frappe.whitelist()
 def update_student_details(
@@ -294,11 +343,14 @@ def update_student_details(
     student_date_of_birth=None,
     gr_number=None,
     email_address=None,
-    phone_number=None
+    phone_number=None,
+    roll_number=None,
+    student_group=None
 ):
-    print(student_id)
     """
-    Updates Student details and first updates the linked User record.
+    Updates Student details and linked User.
+    Also sets student_name = first + middle + last.
+    Updates student's name and roll number inside the given Student Group (without re-adding).
     """
     try:
         if not student_id:
@@ -310,9 +362,10 @@ def update_student_details(
             return {"success": False, "message": "Student not found."}
 
         user_id = student_doc.user
-        user_doc = None
+        print(f"🧾 Student: {student_doc.name}")
+        print(f"👤 Linked User: {user_id}")
 
-        # 2️⃣ Fetch linked User and update first
+        # 2️⃣ Update linked User first
         if user_id and frappe.db.exists("User", user_id):
             user_doc = frappe.get_doc("User", user_id)
 
@@ -329,48 +382,103 @@ def update_student_details(
             if student_date_of_birth:
                 user_doc.birth_date = student_date_of_birth
 
-            # Save user forcibly
             user_doc.flags.ignore_mandatory = True
             user_doc.flags.ignore_validate = True
             user_doc.flags.ignore_permissions = True
             user_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+            print("✅ Linked User updated")
 
         # 3️⃣ Update Student document
+        updated = False
         if first_name:
             student_doc.first_name = first_name
+            updated = True
         if middle_name:
             student_doc.middle_name = middle_name
+            updated = True
         if last_name:
             student_doc.last_name = last_name
+            updated = True
         if student_date_of_birth:
-            student_doc.student_date_of_birth = student_date_of_birth
+            if hasattr(student_doc, "date_of_birth"):
+                student_doc.date_of_birth = student_date_of_birth
+            else:
+                student_doc.student_date_of_birth = student_date_of_birth
+            updated = True
         if gr_number:
             student_doc.gr_number = gr_number
+            updated = True
         if email_address:
             student_doc.student_email_id = email_address
+            updated = True
         if phone_number:
             student_doc.student_mobile_number = phone_number
+            updated = True
+        if roll_number:
+            student_doc.roll_number = roll_number
+            updated = True
 
-        student_doc.save(ignore_permissions=True)
+        # 4️⃣ Set full student_name
+        full_name_parts = [first_name, middle_name, last_name]
+        student_doc.student_name = " ".join([p for p in full_name_parts if p])
+        updated = True
+        print(f"🧩 student_name set to: {student_doc.student_name}")
 
-        # 4️⃣ Commit both updates
-        frappe.db.commit()
+        if updated:
+            # Prevent permission errors from Customer hooks
+            if hasattr(student_doc, "set_missing_customer_details"):
+                student_doc.set_missing_customer_details = lambda *a, **kw: None
+
+            student_doc.flags.ignore_permissions = True
+            student_doc.flags.ignore_mandatory = True
+            student_doc.flags.ignore_validate = True
+            student_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+            print("✅ Student updated in DB")
+
+        # 5️⃣ Update inside the given Student Group
+        if student_group:
+            if not frappe.db.exists("Student Group", student_group):
+                return {"success": False, "message": f"Student Group '{student_group}' not found."}
+
+            group_doc = frappe.get_doc("Student Group", student_group)
+            found = False
+
+            for row in group_doc.students:
+                if row.student == student_doc.name:
+                    row.student_name = student_doc.student_name
+                    if roll_number:
+                        row.group_roll_number = roll_number
+                    found = True
+                    break
+
+            if found:
+                group_doc.flags.ignore_permissions = True
+                group_doc.save(ignore_permissions=True)
+                frappe.db.commit()
+                print(f"✅ Updated student in group: {student_group}")
+            else:
+                print(f"⚠️ Student not found in group: {student_group}")
+
+        # Reload for confirmation
+        student_doc.reload()
 
         return {
             "success": True,
-            "message": "Student and linked User details updated successfully.",
+            "message": "Student, linked User, and Student Group updated successfully.",
             "student": student_doc.name,
-            "user": user_id or "N/A"
+            "user": user_id or "N/A",
+            "student_name": student_doc.student_name,
+            "student_group": student_group,
         }
-
-    except frappe.DoesNotExistError:
-        frappe.log_error(f"Student {student_id} not found.", "Update Student Details")
-        return {"success": False, "message": "Student not found."}
 
     except Exception as e:
         frappe.log_error(f"Unexpected Error: {str(e)}", "Update Student Details")
         return {"success": False, "message": f"Error: {str(e)}"}
 
+
+import frappe
 
 @frappe.whitelist()
 def update_guardian_details(
@@ -413,7 +521,6 @@ def update_guardian_details(
                 user_doc.mobile_no = phone_number
             if guardian_email:
                 user_doc.email = guardian_email
-                # user_doc.user = guardian_email
             if guardian_date_of_birth:
                 user_doc.birth_date = guardian_date_of_birth
 
@@ -465,7 +572,6 @@ def update_guardian_details(
 
 
 
-
 @frappe.whitelist(allow_guest=True)
 def update_guardian_phone(guardian_id, phone_number):
     try:
@@ -506,7 +612,8 @@ def update_guardian_phone(guardian_id, phone_number):
 
 @frappe.whitelist()
 def get_student_guardian_names(student):
-    """Returns List of Guardians of a Student with relation and mobile number."""
+    """Returns List of Guardians of a Student with relation, contact, and additional details."""
+    # Fetch all guardians linked to the student
     guardians = frappe.get_all(
         "Student Guardian", 
         fields=["guardian_name", "guardian", "relation"], 
@@ -516,15 +623,23 @@ def get_student_guardian_names(student):
     guardian_list = []
     for guardian in guardians:
         guardian_doc = frappe.get_doc("Guardian", guardian.get("guardian"))
+        print(guardian_doc.email_address)
         guardian_info = {
-            "guardian": guardian.get("guardian"),  # Include the guardian ID
+            "guardian": guardian.get("guardian"),  # Guardian ID
             "guardian_name": guardian.get("guardian_name"),
             "relation": guardian.get("relation"),
-            "mobile_number": guardian_doc.mobile_number if guardian_doc else None
+            "mobile_number": guardian_doc.mobile_number if guardian_doc else None,
+            "email": guardian_doc.email_address if hasattr(guardian_doc, "email_address") else None,
+            "occupation": guardian_doc.occupation if hasattr(guardian_doc, "occupation") else None,
+            "designation": guardian_doc.designation if hasattr(guardian_doc, "designation") else None,
+            "work_address": guardian_doc.work_address if hasattr(guardian_doc, "work_address") else None,
+            "education": guardian_doc.education if hasattr(guardian_doc, "education") else None
         }
+
         guardian_list.append(guardian_info)
     
     return guardian_list
+
 
 
 @frappe.whitelist(allow_guest=True)
@@ -631,12 +746,11 @@ def update_student_profile_image(student_id, base64_image):
 #     else:
 #         frappe.throw("Incorrect OTP!")
 
-import frappe
+
 import requests
 from frappe.auth import LoginManager
 
-import requests
-import frappe
+
 
 MSG91_AUTH_KEY = "440500AhNX5vWp2a67a1d344P1"
 MSG91_OTP_TEMPLATE_ID = "67b44535d6fc0513410877e4"
@@ -790,7 +904,7 @@ def verify_otp_and_create_session(phone: str, otp: str, role: str = None):
 #     return get_user_details(user, role)
 from frappe.auth import LoginManager
 
-import frappe
+
 
 @frappe.whitelist(allow_guest=True)  # Use allow_guest=True if users without login need access
 def verify_otp_and_get_api_key(phone: str, otp: str):
@@ -865,7 +979,7 @@ def get_user_name_with_phone(phone: str):
     return frappe.db.get_value("User", {"mobile_no": phone}, "name")
 
 import requests
-import frappe
+
 from frappe.auth import LoginManager
 
 GOOGLE_OAUTH2_URL = "https://oauth2.googleapis.com/tokeninfo"
@@ -938,6 +1052,47 @@ def verify_google_token_and_create_session(id_token: str, role: str = None):
         return {"success": False, "error": "Authentication failed. Please try again."}
 
 
+@frappe.whitelist(allow_guest=True)
+def verify_google_token(id_token: str):
+    """
+    Verifies Google ID token and returns API key & secret if the user exists in Frappe.
+    """
+    try:
+        # Verify the Google ID token
+        response = requests.get(f"{GOOGLE_OAUTH2_URL}?id_token={id_token}")
+        token_info = response.json()
+
+        if "email" not in token_info:
+            return {"success": False, "error": "Invalid token"}
+
+        email = token_info["email"]
+
+        # Check if user exists in Frappe
+        if not frappe.db.exists("User", email):
+            return {"success": False, "error": "User not found"}
+
+        user_doc = frappe.get_doc("User", email)
+
+        # Generate API Key if it doesn't exist
+        api_key = user_doc.api_key if user_doc.api_key else frappe.generate_hash(length=15)
+        frappe.db.set_value("User", email, "api_key", api_key)
+        frappe.db.commit()
+
+        try:
+            api_secret = frappe.utils.password.get_decrypted_password("User", email, "api_secret")
+        except frappe.exceptions.AuthenticationError:
+            api_secret = frappe.generate_hash(length=30)
+            frappe.utils.password.set_encrypted_password("User", email, api_secret, "api_secret")  # FIX HERE
+            frappe.db.commit()
+
+        return {
+            "api_key": api_key,
+            "api_secret": api_secret
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Google Auth Error: {str(e)}", "Google Login")
+        return {"success": False, "error": "Authentication failed"}
 # @frappe.whitelist(allow_guest=True)
 # def verify_otp_and_login(phone: str, otp: str):
 #     """
@@ -1259,7 +1414,7 @@ def get_student_info():
 @frappe.whitelist()
 def get_guardian_app_data(guardian_id):
     guardian = frappe.get_all("Guardian", filters={"user": guardian_id}, limit=1)
-    print("Found Guardian doc:", guardian)
+    # print("Found Guardian doc:", guardian)
 
     if not guardian:
         frappe.throw(f"No Guardian found for user: {guardian_id}")
@@ -1290,7 +1445,7 @@ def get_guardian_app_data(guardian_id):
         "student_list": student_list,
     }
 
-    print(response)
+    # print(response)
     return response
 
 
@@ -1300,12 +1455,30 @@ def get_student_app_data(studentID):
 
     response = {}
     try:
+        print(f"🔍 Received studentID: {studentID}, type: {type(studentID)}")
+        
+        # Handle case where studentID might be a stringified object
+        if isinstance(studentID, str) and studentID.startswith('{'):
+            import json
+            try:
+                student_data = json.loads(studentID)
+                # Extract the actual student ID from the object
+                studentID = student_data.get('student') or student_data.get('name')
+                print(f"📦 Extracted student ID from object: {studentID}")
+            except json.JSONDecodeError:
+                pass
+        
+        # If we still don't have a valid student ID, return error
+        if not studentID:
+            frappe.throw("Student ID is required")
+        
+        print(f"🎯 Fetching student with ID: {studentID}")
+
         # Fetch the student document
-        # student = frappe.get_doc("Student", {"student_email_id": studentID})
         student = frappe.get_doc("Student", studentID)
 
         if not student:
-            frappe.throw("Student not found")
+            frappe.throw(f"Student {studentID} not found")
 
         # Get the current program and student group
         current_program = get_current_enrollment(student.name)
@@ -1331,7 +1504,8 @@ def get_student_app_data(studentID):
         response.update({
             "base64profile": base64image,
             "name": studentDetails.student_name,
-            "ID": student.name,
+            "student": student.name,  # Make sure this is included
+            "student_name": studentDetails.student_name,
             "group_roll_no": studentDetails.group_roll_number,
             "student_group": student_group,
             "mobile": student.student_mobile_number,
@@ -1389,11 +1563,11 @@ def get_student_app_data(studentID):
     except Exception as e:
         frappe.log_error(message=frappe.get_traceback(), title="Error in get_student_app_data")
         response["error"] = f"An error occurred: {str(e)}"
-
+    
+    # print(f"📤 Sending response: {response}")
     return response
 
 
-import frappe
 
 ROLE_MAPPING = {
     "teacher": "Instructor",
@@ -1721,7 +1895,6 @@ def get_student_attendance_records(based_on, date=None, student_group=None, cour
                     else: 
                         student.leave_count += 1
 
-        print(student_list)
         # Add student_group to the response structure
         # response = {
         #     "message": student_list  # Add the students below it
@@ -1794,7 +1967,7 @@ def mark_attendance(
             "status": "error"
         }
     
-import frappe
+
 from frappe import _
 
 @frappe.whitelist()
@@ -1808,7 +1981,7 @@ def get_student_guardians(student):
     return guardians
 
 import requests
-import frappe
+
 
 MSG91_AUTH_KEY = "440500AhNX5vWp2a67a1d344P1"
 MSG91_TEMPLATE_ID = "67b44535d6fc0513410877e4"
@@ -2082,7 +2255,7 @@ from datetime import datetime
 # });
 
 import random
-import frappe
+
 
 # Function to generate unique email for the guardian
 def generate_unique_email(name):
@@ -2149,8 +2322,39 @@ def add_guardian_to_student(student_id, student_name, guardian_name, relation, p
 
 @frappe.whitelist()
 def submit_leave_application(student, from_date, to_date, student_group, reason, image=None):
-    if frappe.session.user:
-        # Create a new Leave Application document
+    import base64
+    from frappe.utils.file_manager import save_file
+
+    try:
+        # 🔹 Ensure the student exists
+        if not frappe.db.exists("Student", student):
+            return {"status": "error", "message": f"Student '{student}' not found. Please verify the Student ID."}
+
+        # 🔹 Check for duplicate leave before creating doc
+        duplicate = frappe.db.sql(
+            """
+            SELECT name 
+            FROM `tabStudent Leave Application`
+            WHERE student=%(student)s
+            AND (
+                (%(from_date)s BETWEEN from_date AND to_date)
+                OR (%(to_date)s BETWEEN from_date AND to_date)
+                OR (from_date BETWEEN %(from_date)s AND %(to_date)s)
+            )
+            AND docstatus < 2
+            """,
+            {"student": student, "from_date": from_date, "to_date": to_date},
+            as_dict=True,
+        )
+
+        if duplicate:
+            existing = duplicate[0].name
+            return {
+                "status": "error",
+                "message": f"Duplicate leave application already exists ({existing}) for this student between these dates."
+            }
+
+        # 🔹 Create new Leave Application
         doc = frappe.new_doc("Student Leave Application")
         doc.student = student
         doc.from_date = from_date
@@ -2158,33 +2362,40 @@ def submit_leave_application(student, from_date, to_date, student_group, reason,
         doc.student_group = student_group
         doc.reason = reason
 
-        # Insert the document to generate a valid `name` for linking
         doc.insert(ignore_permissions=True, ignore_mandatory=True)
 
-        # Attach the image if provided
+        # 🔹 Handle image (optional)
         if image:
-            # Decode the base64 image string
             image_data = base64.b64decode(image)
-            fname = "leave_application_image.jpg"  # Adjust the file name as needed
+            fname = "leave_application_image.jpg"
 
-            # Save the image file and link it to the document
             saved_file = save_file(
-                fname=fname,           # Corrected argument for file name
-                content=image_data,    # File content
-                dt="Student Leave Application", # Doctype
-                dn=doc.name,           # Document name
-                is_private=0           # Set to 1 if the file should be private
+                fname=fname,
+                content=image_data,
+                dt="Student Leave Application",
+                dn=doc.name,
+                is_private=0
             )
-            # Optionally, you can add the file URL to a custom field in the document
             doc.document = saved_file.file_url
 
-        # Save the document after attaching the image
-        doc.save()
-        frappe.db.commit()  # Ensure the changes are committed to the database
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
 
-        return {"status": "success", "message": "Leave application submitted successfully", "docname": doc.name}
-    else:
-        return
+        return {
+            "status": "success",
+            "message": "Leave application submitted successfully.",
+            "docname": doc.name
+        }
+
+    except frappe.ValidationError as e:
+        frappe.db.rollback()
+        return {"status": "error", "message": str(e)}
+
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(message=frappe.get_traceback(), title="Leave Application Submit Error")
+        return {"status": "error", "message": f"An unexpected error occurred: {str(e)}"}
+
 
 
 # @frappe.whitelist(allow_guest=True)
@@ -2194,7 +2405,7 @@ def submit_leave_application(student, from_date, to_date, student_group, reason,
 #     # to_date = datetime.strptime(to_date, "%Y-%m-%d")  # Correct format for YYYY-MM-DD
 
 #     # Create a new Leave Application document
-#     doc = frappe.new_doc("Leave Application")
+#     doc = frappe.new_doc("Student Leave Application")
 #     doc.student = student
 #     doc.from_date = from_date
 #     doc.to_date = to_date
@@ -2319,7 +2530,7 @@ def get_current_enrollment(student, academic_year=None):
 
 
 #INSTRUCTOR
-import frappe
+
 import requests
 import base64
 from io import BytesIO
@@ -2329,7 +2540,7 @@ def get_leave_application(name):
     try:
         # Fetch the Leave Application document based on student group and student
         leave = frappe.get_doc(
-            "Leave Application",  # The Doctype
+            "Student Leave Application",  # The Doctype
             {   
                 "name": name,
                 # "student_group": student_group,
@@ -2416,7 +2627,7 @@ import os
 import base64
 import requests
 from io import BytesIO
-import frappe
+
 
 
 import requests
@@ -2438,51 +2649,40 @@ def convert_image_to_base64(image_url):
 
     return None
 
-
-
-
-
 @frappe.whitelist()
 def update_leave_status(name, status):
-    if frappe.session.user:
-        try:
-            # Get the leave application document for the given name
-            leave = frappe.get_doc("Student Leave Application", name)
-            print(leave)
+    try:
+        leave = frappe.get_doc("Student Leave Application", name)
+        if not leave:
+            return {"success": False, "message": "Leave application not found.", "status": None}
 
-            if not leave:
-                # Handle case where the document does not exist
-                return {"message": "Leave application not found."}
+        status = status.lower()
+        message = "Invalid status."
 
-            # Log the current status of the leave
-            print(f"Current Leave Status (docstatus): {leave.docstatus}")
+        if status == "approved":
+            leave.mark_as_present = 1
+            leave.save(ignore_permissions=True)
+            leave.submit()
+            message = "Leave approved and submitted successfully."
 
-            # Ensure the leave is in Draft state before submitting
-            if leave.docstatus != 0:  # 0 is Draft, 1 is Submitted
-                return {"message": "Leave application is already submitted or in a final state."}
+        elif status == "rejected":
+            leave.delete(ignore_permissions=True)
+            message = "Leave application rejected and deleted successfully."
 
-            # Update status based on the provided status
-            if status == "approved":
-                leave.status = "Approved"  # Ensure that "status" is a valid field on the Doctype
-                leave.save()
-                leave.submit()  # Submit the leave application
-                frappe.db.commit()
+        frappe.db.commit()
 
-            elif status == "rejected":
-                leave.status = "Rejected"  # Set status as Rejected
-                leave.save()
-                leave.delete()  # Optionally delete the record
-                frappe.db.commit()
+        return {
+            "success": True,
+            "message": message,
+            "name": name,
+            "status": status.capitalize(),
+        }
 
-            # Return success message
-            return {"message": "Leave status updated successfully."}
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(frappe.get_traceback(), "Update Leave Status Error")
+        return {"success": False, "message": f"An error occurred: {str(e)}", "status": None}
 
-        except Exception as e:
-            # Catch any other exceptions and return the error message
-            return {"message": f"An error occurred: {str(e)}"}
-
-    else:
-        return {"message": "User is not logged in."}
 
 
 
@@ -2529,7 +2729,7 @@ def submit_notice(notice_heading, notice_message, student_group):
     else:
         return
     
-import frappe
+
 from frappe import _
 
 # @frappe.whitelist()

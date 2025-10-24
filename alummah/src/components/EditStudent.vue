@@ -1,8 +1,67 @@
 <template>
   <div class="min-h-screen bg-gray-50 p-4">
+    <!-- Alert Notifications -->
+    <div class="fixed top-4 right-4 z-50 space-y-2 w-96 max-w-full">
+      <!-- Success Alert -->
+      <div 
+        v-if="successMessage" 
+        class="bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg transform transition-all duration-300 ease-in-out"
+        :class="alertAnimation"
+      >
+        <div class="flex items-start space-x-3">
+          <div class="flex-shrink-0">
+            <svg class="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <p class="text-green-800 font-medium">Success</p>
+            <p class="text-green-700 text-sm mt-1">{{ successMessage }}</p>
+          </div>
+        </div>
+        <!-- OK Button -->
+        <div class="mt-4 flex justify-end">
+          <button 
+            @click="hideAlert" 
+            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+
+      <!-- Error Alert -->
+      <div 
+        v-if="errorMessage" 
+        class="bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg transform transition-all duration-300 ease-in-out"
+        :class="alertAnimation"
+      >
+        <div class="flex items-start space-x-3">
+          <div class="flex-shrink-0">
+            <svg class="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <p class="text-red-800 font-medium">Error</p>
+            <p class="text-red-700 text-sm mt-1">{{ errorMessage }}</p>
+          </div>
+        </div>
+        <!-- OK Button -->
+        <div class="mt-4 flex justify-end">
+          <button 
+            @click="hideAlert" 
+            class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-gray-800">
-        Edit Student: {{ studentData.student_name }}
+        Edit Student: {{ studentInfo.student_name || studentId }}
         <span class="text-sm text-gray-500 font-normal ml-2">(ID: {{ studentId }})</span>
       </h1>
       <p class="text-gray-600" v-if="!settingsLoading">
@@ -16,15 +75,23 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="settingsLoading" class="flex justify-center items-center py-8">
+    <div v-if="studentDetailsResource.loading || settingsLoading" class="flex justify-center items-center py-8">
       <div class="spinner"></div>
-      <span class="ml-2 text-gray-600">Loading settings...</span>
+      <span class="ml-2 text-gray-600">Loading student details...</span>
     </div>
 
     <!-- Settings Error State -->
     <div v-else-if="settingsError" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
       <p class="text-red-800">Failed to load settings. Using default permissions.</p>
       <button @click="fetchAdminSettings" class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm">
+        Retry
+      </button>
+    </div>
+
+    <!-- Student Details Error -->
+    <div v-else-if="studentDetailsError" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+      <p class="text-red-800">Failed to load student details.</p>
+      <button @click="fetchStudentDetails" class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm">
         Retry
       </button>
     </div>
@@ -45,6 +112,18 @@
             <p class="text-xs text-gray-500 mt-1">Student ID cannot be changed</p>
           </div>
 
+          <!-- Student Group (readonly) -->
+          <div class="md:col-span-2 lg:col-span-3">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Student Group</label>
+            <input 
+              :value="studentGroup"
+              type="text" 
+              readonly
+              class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
+            />
+            <p class="text-xs text-gray-500 mt-1">Student group cannot be changed</p>
+          </div>
+
           <!-- Personal Details Section - Only show if allowed -->
           <div v-if="allowInstructorsModify" class="md:col-span-2 lg:col-span-3">
             <h3 class="text-lg font-medium text-gray-800 mb-4 border-b pb-2">Personal Details</h3>
@@ -53,7 +132,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
             <input 
-              v-model="studentData['First Name']"
+              v-model="studentInfo.first_name"
               type="text" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -62,7 +141,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">Middle Name</label>
             <input 
-              v-model="studentData['Middle Name']"
+              v-model="studentInfo.middle_name"
               type="text" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -71,7 +150,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
             <input 
-              v-model="studentData['Last Name']"
+              v-model="studentInfo.last_name"
               type="text" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -80,7 +159,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">Student Date of Birth</label>
             <input 
-              v-model="studentData['Student Date of Birth']"
+              v-model="studentInfo.student_date_of_birth"
               type="date" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -89,10 +168,33 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">GR Number</label>
             <input 
-              v-model="studentData['GR Number']"
+              v-model="studentInfo.gr_number"
               type="text" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <!-- Roll Number Field - Only show if allowed -->
+          <div v-if="allowInstructorsModify">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Roll Number
+            </label>
+            <input 
+              v-model="studentInfo.roll_number"
+              type="number"
+              min="1"
+              max="999"
+              step="1"
+              placeholder="Enter roll number"
+              @keypress="preventDecimal"
+              @input="validateRollNumber"
+              :class="[
+                'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+                rollNumberError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              ]"
+            />
+            <p v-if="rollNumberError" class="text-red-600 text-xs mt-1">{{ rollNumberError }}</p>
+            <p v-else class="text-gray-500 text-xs mt-1">Must be a whole number between 1-999 (optional)</p>
           </div>
           
           <!-- Contact Information Section - Only show if allowed -->
@@ -103,7 +205,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
             <input 
-              v-model="studentData['Email Address']"
+              v-model="studentInfo.email_address"
               type="email" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -112,10 +214,31 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
             <input 
-              v-model="studentData['Phone Number']"
+              v-model="studentInfo.phone_number"
               type="tel" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+        </div>
+
+                <!-- Form Actions -->
+        <div class="mt-8 pt-6 border-t flex justify-between items-center">
+          <div class="flex space-x-3">
+            <button 
+              type="button" 
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              @click="$router.back()"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+              :disabled="updateLoading"
+            >
+              <span v-if="updateLoading">Updating...</span>
+              <span v-else>Update Student</span>
+            </button>
           </div>
         </div>
 
@@ -221,7 +344,7 @@
           <div class="bg-white rounded-lg border border-gray-200 p-6">
             <h4 class="text-lg font-semibold text-gray-800 mb-4">Existing Guardians</h4>
             
-            <div v-if="guardiansLoading" class="flex justify-center py-4">
+            <div v-if="studentDetailsResource.loading" class="flex justify-center py-4">
               <div class="spinner-small"></div>
               <span class="ml-2 text-gray-600">Loading guardians...</span>
             </div>
@@ -236,7 +359,7 @@
             <div v-else class="space-y-4">
               <div 
                 v-for="guardian in guardians" 
-                :key="guardian.guardian || guardian.guardian_name"
+                :key="guardian.guardian"
                 class="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
               >
                 <div class="flex items-start justify-between">
@@ -262,20 +385,23 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                             </svg>
-                            <span>{{ guardian.mobile_number }}</span>
+                            <span>{{ guardian.mobile_number || 'No phone' }}</span>
                           </span>
                           <span class="text-gray-400">•</span>
                           <span class="flex items-center space-x-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                             </svg>
-                            <span>{{ guardian.guardian_email || 'No email' }}</span>
+                            <span>{{ guardian.email || 'No email' }}</span>
                           </span>
                         </div>
                         <div v-if="guardian.occupation || guardian.designation" class="flex items-center space-x-2 text-xs">
                           <span v-if="guardian.occupation">💼 {{ guardian.occupation }}</span>
                           <span v-if="guardian.designation" class="text-gray-400">•</span>
                           <span v-if="guardian.designation">🎯 {{ guardian.designation }}</span>
+                        </div>
+                        <div v-if="guardian.education" class="text-xs text-gray-500">
+                          🎓 {{ guardian.education }}
                         </div>
                       </div>
 
@@ -294,7 +420,7 @@
                           <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                             <input
-                              v-model="editedGuardian.phone_number"
+                              v-model="editedGuardian.mobile_number"
                               type="tel"
                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -315,7 +441,7 @@
                           <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
                             <input
-                              v-model="editedGuardian.guardian_date_of_birth"
+                              v-model="editedGuardian.date_of_birth"
                               type="date"
                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -324,7 +450,7 @@
                           <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
                             <input
-                              v-model="editedGuardian.guardian_email"
+                              v-model="editedGuardian.email"
                               type="email"
                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -404,34 +530,13 @@
             </div>
           </div>
         </div>
-        
-        <!-- Form Actions -->
-        <div class="mt-8 pt-6 border-t flex justify-between items-center">
           <div class="text-sm text-gray-600">
-            <span v-if="allowInstructorsModify" class="text-green-600">
-              ✓ You have full editing permissions
-            </span>
-            <span v-else class="text-orange-600">
-              ⚠ You can only edit guardian information
-            </span>
-          </div>
-          <div class="flex space-x-3">
-            <button 
-              type="button" 
-              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-              @click="$router.back()"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
-              :disabled="updateLoading"
-            >
-              <span v-if="updateLoading">Updating...</span>
-              <span v-else>Update Student</span>
-            </button>
-          </div>
+          <span v-if="allowInstructorsModify" class="text-green-600">
+            ✓ You have full editing permissions
+          </span>
+          <span v-else class="text-orange-600">
+            ⚠ You can only edit guardian information
+          </span>
         </div>
       </form>
     </div>
@@ -446,15 +551,30 @@ import { createResource } from 'frappe-ui'
 const route = useRoute()
 
 // Reactive state
-const studentData = ref({})
+const studentInfo = reactive({
+  student: '',
+  first_name: '',
+  middle_name: '',
+  last_name: '',
+  student_date_of_birth: '',
+  gr_number: '',
+  email_address: '',
+  phone_number: '',
+  roll_number: ''
+})
 const studentId = ref('')
+const studentGroup = ref('')
 const settingsLoading = ref(true)
 const settingsError = ref(false)
 const updateLoading = ref(false)
+const rollNumberError = ref('')
+const errorMessage = ref('')
+const successMessage = ref('')
+const alertAnimation = ref('')
+const studentDetailsError = ref('')
 
 // Guardian management state
 const guardians = ref([])
-const guardiansLoading = ref(false)
 const editingGuardianId = ref(null)
 const updatingGuardian = ref(false)
 const addingGuardian = ref(false)
@@ -469,10 +589,10 @@ const newGuardian = reactive({
 // Edited guardian form
 const editedGuardian = reactive({
   guardian_name: '',
-  phone_number: '',
+  mobile_number: '',
   relation: 'Mother',
-  guardian_date_of_birth: '',
-  guardian_email: '',
+  date_of_birth: '',
+  email: '',
   occupation: '',
   designation: '',
   work_address: '',
@@ -494,7 +614,29 @@ const isGuardianLimitReached = computed(() => {
   return guardians.value.length >= 3
 })
 
-// API Resources
+// Helper functions for alert handling
+const showError = (message) => {
+  errorMessage.value = message
+  successMessage.value = ''
+  alertAnimation.value = 'animate-slide-in-right'
+}
+
+const showSuccess = (message) => {
+  successMessage.value = message
+  errorMessage.value = ''
+  alertAnimation.value = 'animate-slide-in-right'
+}
+
+const hideAlert = () => {
+  alertAnimation.value = 'animate-slide-out-right'
+  setTimeout(() => {
+    errorMessage.value = ''
+    successMessage.value = ''
+    alertAnimation.value = ''
+  }, 300)
+}
+
+// API Resources with proper error handling
 const adminSettingsResource = createResource({
   url: 'school.al_ummah.api3.fetch_admin_settings',
   auto: false,
@@ -514,70 +656,167 @@ const adminSettingsResource = createResource({
   }
 })
 
+// New API Resource for getting student details
+const studentDetailsResource = createResource({
+  url: 'school.al_ummah.api2.get_student_details',
+  auto: false,
+  onSuccess(data) {
+    console.log('Student details loaded:', data)
+    
+    // Populate student info
+    if (data.student_info) {
+      Object.assign(studentInfo, data.student_info)
+    }
+    
+    // Populate guardians
+    if (data.guardians && Array.isArray(data.guardians)) {
+      guardians.value = data.guardians
+    }
+    
+    studentDetailsError.value = ''
+  },
+  onError(error) {
+    console.error('Error fetching student details:', error)
+    studentDetailsError.value = 'Failed to load student details.'
+    guardians.value = []
+  }
+})
+
 const updateStudentResource = createResource({
   url: 'school.al_ummah.api2.update_student_details',
   auto: false,
   onSuccess(data) {
     updateLoading.value = false
     console.log('Student updated successfully:', data)
-    alert('Student information updated successfully!')
+    
+    if (data.success) {
+      showSuccess(data.message || 'Student information updated successfully!')
+    } else {
+      showError(data.message || 'Failed to update student information.')
+    }
   },
   onError(error) {
     console.error('Error updating student:', error)
     updateLoading.value = false
-    alert('Failed to update student information. Please try again.')
+    
+    if (error._server_messages) {
+      try {
+        const serverMessages = JSON.parse(error._server_messages || '[]')
+        const lastMessage = serverMessages[serverMessages.length - 1]
+        const parsedMessage = JSON.parse(lastMessage)
+        showError(parsedMessage.message || 'Validation error occurred.')
+      } catch (e) {
+        showError(error.message || 'An unexpected error occurred.')
+      }
+    } else {
+      showError(error.message || 'Failed to update student information. Please try again.')
+    }
   }
 })
 
 const addGuardianResource = createResource({
   url: 'school.al_ummah.api2.add_guardian_to_student',
   auto: false,
-  onSuccess() {
+  onSuccess(data) {
     addingGuardian.value = false
-    fetchGuardians()
-    resetNewGuardianForm()
+    if (data.success) {
+      showSuccess(data.message || 'Guardian added successfully!')
+      fetchStudentDetails() // Refresh the data
+      resetNewGuardianForm()
+    } else {
+      showError(data.message || 'Failed to add guardian.')
+    }
   },
   onError(error) {
     console.error('Error adding guardian:', error)
     addingGuardian.value = false
-    alert('Failed to add guardian. Please try again.')
-  }
-})
-
-const getGuardiansResource = createResource({
-  url: 'school.al_ummah.api2.get_student_guardian_names',
-  auto: false,
-  onSuccess(data) {
-    guardians.value = data || []
-    guardiansLoading.value = false
-  },
-  onError(error) {
-    console.error('Error fetching guardians:', error)
-    guardiansLoading.value = false
-    guardians.value = []
+    
+    if (error._server_messages) {
+      try {
+        const serverMessages = JSON.parse(error._server_messages || '[]')
+        const lastMessage = serverMessages[serverMessages.length - 1]
+        const parsedMessage = JSON.parse(lastMessage)
+        showError(parsedMessage.message || 'Failed to add guardian.')
+      } catch (e) {
+        showError(error.message || 'Failed to add guardian. Please try again.')
+      }
+    } else {
+      showError(error.message || 'Failed to add guardian. Please try again.')
+    }
   }
 })
 
 const updateGuardianDetailsResource = createResource({
   url: 'school.al_ummah.api2.update_guardian_details',
   auto: false,
-  onSuccess() {
+  onSuccess(data) {
     updatingGuardian.value = false
-    editingGuardianId.value = null
-    resetEditedGuardianForm()
-    fetchGuardians()
-    alert('Guardian details updated successfully!')
+    if (data.success) {
+      showSuccess(data.message || 'Guardian details updated successfully!')
+      editingGuardianId.value = null
+      resetEditedGuardianForm()
+      fetchStudentDetails() // Refresh the data
+    } else {
+      showError(data.message || 'Failed to update guardian details.')
+    }
   },
   onError(error) {
     console.error('Error updating guardian details:', error)
     updatingGuardian.value = false
-    alert('Failed to update guardian details. Please try again.')
+    
+    if (error._server_messages) {
+      try {
+        const serverMessages = JSON.parse(error._server_messages || '[]')
+        const lastMessage = serverMessages[serverMessages.length - 1]
+        const parsedMessage = JSON.parse(lastMessage)
+        showError(parsedMessage.message || 'Failed to update guardian details.')
+      } catch (e) {
+        showError(error.message || 'Failed to update guardian details. Please try again.')
+      }
+    } else {
+      showError(error.message || 'Failed to update guardian details. Please try again.')
+    }
   }
 })
 
 // Helper functions
 const isValidPhoneNumber = (number) => {
   return /^[0-9]{10}$/.test(number)
+}
+
+const preventDecimal = (event) => {
+  if (event.key === '.' || event.key === ',' || event.key === 'e' || event.key === 'E' || event.key === '-') {
+    event.preventDefault()
+  }
+}
+
+const validateRollNumber = () => {
+  const rollNumber = studentInfo.roll_number
+  
+  // Allow empty roll number (optional field)
+  if (!rollNumber && rollNumber !== 0) {
+    rollNumberError.value = ''
+    return
+  }
+  
+  const numValue = Number(rollNumber)
+  
+  if (!Number.isInteger(numValue)) {
+    rollNumberError.value = 'Roll number must be a whole number'
+    return
+  }
+  
+  if (numValue < 1) {
+    rollNumberError.value = 'Roll number must be at least 1'
+    return
+  }
+  
+  if (numValue > 999) {
+    rollNumberError.value = 'Roll number cannot exceed 999'
+    return
+  }
+  
+  rollNumberError.value = ''
 }
 
 const resetNewGuardianForm = () => {
@@ -593,27 +832,31 @@ const resetEditedGuardianForm = () => {
   editedGuardian.relation = 'Mother'
 }
 
-// Guardian management functions
-const fetchGuardians = () => {
-  guardiansLoading.value = true
-  getGuardiansResource.fetch({ student: studentId.value })
+// Fetch student details
+const fetchStudentDetails = () => {
+  if (!studentId.value) return
+  
+  studentDetailsResource.fetch({
+    student: studentId.value
+  })
 }
 
+// Guardian management functions
 const addGuardian = async () => {
   if (!isValidPhoneNumber(newGuardian.phone_number)) {
-    alert('Please enter a valid 10-digit phone number.')
+    showError('Please enter a valid 10-digit phone number.')
     return
   }
 
   if (!newGuardian.guardian_name.trim()) {
-    alert('Please enter guardian name.')
+    showError('Please enter guardian name.')
     return
   }
 
   addingGuardian.value = true
   const params = {
     student_id: studentId.value,
-    student_name: studentData.value.student_name,
+    student_name: `${studentInfo.first_name} ${studentInfo.last_name}`.trim(),
     guardian_name: newGuardian.guardian_name,
     relation: newGuardian.relation,
     phone_number: newGuardian.phone_number,
@@ -626,10 +869,10 @@ const startEdit = (guardian) => {
   editingGuardianId.value = guardian.guardian
   // Populate the edit form with current guardian data
   editedGuardian.guardian_name = guardian.guardian_name || ''
-  editedGuardian.phone_number = guardian.mobile_number || ''
+  editedGuardian.mobile_number = guardian.mobile_number || ''
   editedGuardian.relation = guardian.relation || 'Mother'
-  editedGuardian.guardian_date_of_birth = guardian.guardian_date_of_birth || ''
-  editedGuardian.guardian_email = guardian.guardian_email || ''
+  editedGuardian.date_of_birth = guardian.date_of_birth || ''
+  editedGuardian.email = guardian.email || ''
   editedGuardian.occupation = guardian.occupation || ''
   editedGuardian.designation = guardian.designation || ''
   editedGuardian.work_address = guardian.work_address || ''
@@ -642,13 +885,13 @@ const cancelEdit = () => {
 }
 
 const updateGuardianDetails = (guardianId) => {
-  if (!isValidPhoneNumber(editedGuardian.phone_number)) {
-    alert('Please enter a valid 10-digit phone number.')
+  if (!isValidPhoneNumber(editedGuardian.mobile_number)) {
+    showError('Please enter a valid 10-digit phone number.')
     return
   }
 
   if (!editedGuardian.guardian_name.trim()) {
-    alert('Please enter guardian name.')
+    showError('Please enter guardian name.')
     return
   }
 
@@ -657,10 +900,10 @@ const updateGuardianDetails = (guardianId) => {
   const params = {
     guardian_id: guardianId,
     guardian_name: editedGuardian.guardian_name,
-    phone_number: editedGuardian.phone_number,
+    phone_number: editedGuardian.mobile_number,
     relation: editedGuardian.relation,
-    guardian_date_of_birth: editedGuardian.guardian_date_of_birth,
-    guardian_email: editedGuardian.guardian_email,
+    guardian_date_of_birth: editedGuardian.date_of_birth,
+    guardian_email: editedGuardian.email,
     occupation: editedGuardian.occupation,
     designation: editedGuardian.designation,
     work_address: editedGuardian.work_address,
@@ -679,21 +922,34 @@ const fetchAdminSettings = () => {
 
 // Update student function
 const updateStudent = async () => {
+  // Clear previous messages
+  errorMessage.value = ''
+  successMessage.value = ''
+  
+  // Validate roll number before submission
+  validateRollNumber()
+  if (rollNumberError.value) {
+    showError(rollNumberError.value)
+    return
+  }
+
   updateLoading.value = true
   
   try {
     const updateData = {
       student_id: studentId.value,
+      student_group: studentGroup.value,
     }
 
     if (allowInstructorsModify.value) {
-      updateData.first_name = studentData.value['First Name'] || ''
-      updateData.middle_name = studentData.value['Middle Name'] || ''
-      updateData.last_name = studentData.value['Last Name'] || ''
-      updateData.student_date_of_birth = studentData.value['Student Date of Birth'] || ''
-      updateData.gr_number = studentData.value['GR Number'] || ''
-      updateData.email_address = studentData.value['Email Address'] || ''
-      updateData.phone_number = studentData.value['Phone Number'] || ''
+      updateData.first_name = studentInfo.first_name || ''
+      updateData.middle_name = studentInfo.middle_name || ''
+      updateData.last_name = studentInfo.last_name || ''
+      updateData.student_date_of_birth = studentInfo.student_date_of_birth || ''
+      updateData.gr_number = studentInfo.gr_number || ''
+      updateData.email_address = studentInfo.email_address || ''
+      updateData.phone_number = studentInfo.phone_number || ''
+      updateData.roll_number = studentInfo.roll_number || ''
     }
 
     console.log('Sending update data:', updateData)
@@ -702,6 +958,7 @@ const updateStudent = async () => {
   } catch (error) {
     console.error('Error in update student:', error)
     updateLoading.value = false
+    showError('An unexpected error occurred. Please try again.')
   }
 }
 
@@ -710,16 +967,21 @@ onMounted(() => {
   
   if (route.query.studentData) {
     try {
-      studentData.value = JSON.parse(decodeURIComponent(route.query.studentData))
+      const studentData = JSON.parse(decodeURIComponent(route.query.studentData))
       console.log('Student ID:', studentId.value)
-      console.log('Complete student data:', studentData.value)
+      console.log('Complete student data:', studentData)
+      
+      // Set student group from the data
+      studentGroup.value = studentData.student_group || ''
+      
     } catch (error) {
       console.error('Error parsing student data:', error)
+      showError('Failed to load student data.')
     }
   }
 
   fetchAdminSettings()
-  fetchGuardians()
+  fetchStudentDetails()
 })
 </script>
 
@@ -745,5 +1007,36 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Alert Animations */
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 0.3s ease-in;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }
 </style>
