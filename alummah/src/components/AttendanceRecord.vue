@@ -32,12 +32,11 @@
       <div 
         v-for="student in students" 
         :key="student.student"
-        class="bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"
-        @click="viewStudentDetails(student)"
+        class="bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:border-blue-300 transition-colors"
       >
         <div class="flex items-center space-x-4">
           <!-- Student Avatar -->
-          <div class="flex-shrink-0">
+          <div class="flex-shrink-0 cursor-pointer" @click="viewStudentDetails(student)">
             <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm relative overflow-hidden">
               <img
                 v-if="student.base64profile && student.base64profile !== 'null'"
@@ -53,12 +52,12 @@
           </div>
           
           <!-- Student Info -->
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 cursor-pointer" @click="viewStudentDetails(student)">
             <h3 class="font-medium text-gray-800 truncate">{{ student.student_name }}</h3>
             <div class="flex items-center space-x-4 text-sm text-gray-600">
               <span>Roll No: {{ student.group_roll_number }}</span>
               <span class="text-gray-400">•</span>
-              <span class="truncate text-xs">{{ student.student }}</span>
+              <span class="truncate text-xs">ID: {{ student.student }}</span>
             </div>
             
             <!-- Attendance Stats -->
@@ -78,9 +77,21 @@
             </div>
           </div>
           
-          <!-- View Details Arrow -->
-          <div class="flex-shrink-0">
-            <ChevronRightIcon class="w-5 h-5 text-gray-400" />
+          <!-- Action Buttons -->
+          <div class="flex-shrink-0 flex items-center space-x-2">
+            <!-- Edit Button -->
+            <button
+              @click.stop="editStudent(student)"
+              class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Edit Student"
+            >
+              <PencilSquareIcon class="w-5 h-5" />
+            </button>
+            
+            <!-- View Details Arrow -->
+            <div class="cursor-pointer" @click.stop="viewStudentDetails(student)">
+              <ChevronRightIcon class="w-5 h-5 text-gray-400" />
+            </div>
           </div>
         </div>
       </div>
@@ -129,7 +140,7 @@
           <div>
             <h4 class="font-medium text-gray-800">{{ selectedStudent.student_name }}</h4>
             <p class="text-sm text-gray-600">Roll No: {{ selectedStudent.group_roll_number }}</p>
-            <p class="text-xs text-gray-500">{{ selectedStudent.student }}</p>
+            <p class="text-xs text-gray-500">ID: {{ selectedStudent.student }}</p>
           </div>
         </div>
 
@@ -168,6 +179,13 @@
 
         <div class="flex space-x-3 mt-6">
           <button
+            @click="editStudent(selectedStudent)"
+            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2"
+          >
+            <PencilSquareIcon class="w-4 h-4" />
+            <span>Edit Student</span>
+          </button>
+          <button
             @click="closeStudentModal"
             class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
@@ -181,6 +199,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { createResource } from 'frappe-ui'
 import { 
   ArrowPathIcon, 
@@ -189,8 +208,11 @@ import {
   UserGroupIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ClockIcon
+  ClockIcon,
+  PencilSquareIcon
 } from '@heroicons/vue/24/outline'
+
+const router = useRouter()
 
 // Reactive state
 const students = ref([])
@@ -225,16 +247,79 @@ const handleImageError = (event) => {
   event.target.style.display = 'none'
 }
 
+// Edit student function
+const editStudent = (student) => {
+  // Prepare complete student data with all fields
+  const studentData = {
+    // Student ID (primary identifier)
+    student_id: student.student,
+    
+    // Basic info
+    student_name: student.student_name,
+    group_roll_number: student.group_roll_number,
+    student_group: selectedGroup.value,
+    
+    // Personal Details
+    'First Name': student.first_name || student.student_name?.split(' ')[0] || '',
+    'Middle Name': student.middle_name || student.student_name?.split(' ')[1] || '',
+    'Last Name': student.last_name || student.student_name?.split(' ')[2] || '',
+    'Student Date of Birth': student.date_of_birth || student.student_date_of_birth || '',
+    'GR Number': student.gr_number || student.group_roll_number || '',
+    
+    // Contact Information
+    'Email Address': student.email || student.email_address || '',
+    'Phone Number': student.mobile || student.phone_number || '',
+    
+    // Guardian Information
+    'Guardian Name': student.guardian_name || student.parent_name || '',
+    'Guardian Number': student.guardian_number || student.parent_mobile || '',
+    'Relation': student.relation || '',
+    'Guardian Date of Birth': student.guardian_date_of_birth || '',
+    'Guardian Email': student.guardian_email || '',
+    'Guardian Occupation': student.guardian_occupation || '',
+    'Guardian Designation': student.guardian_designation || '',
+    'Guardian Work Address': student.guardian_work_address || '',
+    'Guardian Education': student.guardian_education || '',
+    
+    // Address
+    address: student.address || '',
+    
+    // Profile image
+    base64profile: student.base64profile || '',
+    
+    // Attendance stats
+    present_count: student.present_count || 0,
+    absent_count: student.absent_count || 0,
+    leave_count: student.leave_count || 0,
+    
+    // Additional fields from API
+    gender: student.gender || '',
+    date_of_birth: student.date_of_birth || '',
+    parent_name: student.parent_name || '',
+    parent_mobile: student.parent_mobile || '',
+    
+    // Include all original data
+    ...student
+  }
+
+  // Navigate to EditStudent page with complete student data
+  router.push({
+    name: 'EditStudent',
+    query: {
+      studentId: student.student, // Send student ID as separate parameter for easy access
+      studentData: encodeURIComponent(JSON.stringify(studentData))
+    }
+  })
+}
+
 // Create resource for fetching attendance records
 const attendanceResource = createResource({
   url: 'school.al_ummah.api2.get_student_attendance_records',
   onSuccess(data) {
-    console.log('Attendance records loaded:', data)
     return data
   },
   onError(error) {
     console.error('Error fetching attendance records:', error)
-    // Fallback to localStorage if API fails
     loadAttendanceDataFromStorage()
   }
 })

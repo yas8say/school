@@ -282,6 +282,188 @@ def create_user_and_instructor(email, first_name, phone, password, role, gender,
         return
 
 
+import frappe
+
+
+@frappe.whitelist()
+def update_student_details(
+    student_id,
+    first_name=None,
+    middle_name=None,
+    last_name=None,
+    student_date_of_birth=None,
+    gr_number=None,
+    email_address=None,
+    phone_number=None
+):
+    print(student_id)
+    """
+    Updates Student details and first updates the linked User record.
+    """
+    try:
+        if not student_id:
+            return {"success": False, "message": "Student ID is required."}
+
+        # 1️⃣ Fetch Student document
+        student_doc = frappe.get_doc("Student", student_id)
+        if not student_doc:
+            return {"success": False, "message": "Student not found."}
+
+        user_id = student_doc.user
+        user_doc = None
+
+        # 2️⃣ Fetch linked User and update first
+        if user_id and frappe.db.exists("User", user_id):
+            user_doc = frappe.get_doc("User", user_id)
+
+            if first_name:
+                user_doc.first_name = first_name
+            if last_name:
+                user_doc.last_name = last_name
+            if email_address:
+                user_doc.email = email_address
+            if phone_number:
+                if not phone_number.isdigit() or len(phone_number) != 10:
+                    return {"success": False, "message": "Invalid phone number. Must be 10 digits."}
+                user_doc.mobile_no = phone_number
+            if student_date_of_birth:
+                user_doc.birth_date = student_date_of_birth
+
+            # Save user forcibly
+            user_doc.flags.ignore_mandatory = True
+            user_doc.flags.ignore_validate = True
+            user_doc.flags.ignore_permissions = True
+            user_doc.save(ignore_permissions=True)
+
+        # 3️⃣ Update Student document
+        if first_name:
+            student_doc.first_name = first_name
+        if middle_name:
+            student_doc.middle_name = middle_name
+        if last_name:
+            student_doc.last_name = last_name
+        if student_date_of_birth:
+            student_doc.student_date_of_birth = student_date_of_birth
+        if gr_number:
+            student_doc.gr_number = gr_number
+        if email_address:
+            student_doc.student_email_id = email_address
+        if phone_number:
+            student_doc.student_mobile_number = phone_number
+
+        student_doc.save(ignore_permissions=True)
+
+        # 4️⃣ Commit both updates
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message": "Student and linked User details updated successfully.",
+            "student": student_doc.name,
+            "user": user_id or "N/A"
+        }
+
+    except frappe.DoesNotExistError:
+        frappe.log_error(f"Student {student_id} not found.", "Update Student Details")
+        return {"success": False, "message": "Student not found."}
+
+    except Exception as e:
+        frappe.log_error(f"Unexpected Error: {str(e)}", "Update Student Details")
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
+@frappe.whitelist()
+def update_guardian_details(
+    guardian_id,
+    guardian_name=None,
+    phone_number=None,
+    relation=None,
+    guardian_date_of_birth=None,
+    guardian_email=None,
+    occupation=None,
+    designation=None,
+    work_address=None,
+    education=None
+):
+    """
+    Updates Guardian details and first updates the linked User record.
+    """
+    try:
+        if not guardian_id:
+            return {"success": False, "message": "Guardian ID is required."}
+
+        # 1️⃣ Fetch Guardian document
+        guardian_doc = frappe.get_doc("Guardian", guardian_id)
+        if not guardian_doc:
+            return {"success": False, "message": "Guardian not found."}
+
+        user_id = guardian_doc.user
+        user_doc = None
+
+        # 2️⃣ Fetch linked User and update first
+        if user_id and frappe.db.exists("User", user_id):
+            user_doc = frappe.get_doc("User", user_id)
+
+            if guardian_name:
+                user_doc.first_name = guardian_name
+                user_doc.full_name = guardian_name
+            if phone_number:
+                if not phone_number.isdigit() or len(phone_number) != 10:
+                    return {"success": False, "message": "Invalid phone number. Must be 10 digits."}
+                user_doc.mobile_no = phone_number
+            if guardian_email:
+                user_doc.email = guardian_email
+                # user_doc.user = guardian_email
+            if guardian_date_of_birth:
+                user_doc.birth_date = guardian_date_of_birth
+
+            # Save user forcibly bypassing validation
+            user_doc.flags.ignore_mandatory = True
+            user_doc.flags.ignore_validate = True
+            user_doc.flags.ignore_permissions = True
+            user_doc.save(ignore_permissions=True)
+
+        # 3️⃣ Update Guardian after User
+        if guardian_name:
+            guardian_doc.guardian_name = guardian_name
+        if phone_number:
+            guardian_doc.mobile_number = phone_number
+        if relation:
+            guardian_doc.relation = relation
+        if guardian_date_of_birth:
+            guardian_doc.date_of_birth = guardian_date_of_birth
+        if guardian_email:
+            guardian_doc.email_address = guardian_email
+        if occupation:
+            guardian_doc.occupation = occupation
+        if designation:
+            guardian_doc.designation = designation
+        if work_address:
+            guardian_doc.work_address = work_address
+        if education:
+            guardian_doc.education = education
+
+        guardian_doc.save(ignore_permissions=True)
+
+        # 4️⃣ Final commit
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message": "Guardian and linked User details updated successfully.",
+            "guardian": guardian_doc.name,
+            "user": user_id or "N/A"
+        }
+
+    except frappe.DoesNotExistError:
+        frappe.log_error(f"Guardian {guardian_id} not found.", "Update Guardian Details")
+        return {"success": False, "message": "Guardian not found."}
+
+    except Exception as e:
+        frappe.log_error(f"Unexpected Error: {str(e)}", "Update Guardian Details")
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+
 
 
 @frappe.whitelist(allow_guest=True)
