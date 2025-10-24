@@ -454,6 +454,7 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
                     "email": guardian_email,
                 }).insert(ignore_permissions=True)
                 user_doc.add_roles("Guardian")
+                user_doc.new_password = "alummah"
                 user_name = user_doc.name
 
             # Create Guardian and link to User
@@ -1114,7 +1115,7 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
     
     # Set default values
     salutation = "Mr" if gender and gender.lower() == "male" else "Ms"
-    password = "#pass4AWAMI"
+    password = "alummah"
 
     # Create user if doesn't exist
     if not user_doc:

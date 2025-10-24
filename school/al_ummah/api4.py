@@ -136,6 +136,7 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
                     "email": guardian_email,
                 }).insert(ignore_permissions=True)
                 user_doc.add_roles("Guardian")
+                user_doc.new_password = "alummah"
                 user_doc.user_type = "Website User"
                 user_name = user_doc.name
 
@@ -620,7 +621,7 @@ def create_user_and_instructor(full_name, first_name, middle_name, last_name, ge
                              qualification="", pan_number="", ifsc_code="", class_name="", user_doc=None):
 
     salutation = "Mr" if gender and gender.lower() == "male" else "Ms"
-    password = "#pass4AWAMI"
+    password = "alummah"
 
     if not email or not phone:
         raise Exception("Email and Mobile are required")

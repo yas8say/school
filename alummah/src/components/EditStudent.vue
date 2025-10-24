@@ -22,6 +22,7 @@
         <!-- OK Button -->
         <div class="mt-4 flex justify-end">
           <button 
+            type="button"
             @click="hideAlert" 
             class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
           >
@@ -50,6 +51,7 @@
         <!-- OK Button -->
         <div class="mt-4 flex justify-end">
           <button 
+            type="button"
             @click="hideAlert" 
             class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
           >
@@ -83,7 +85,11 @@
     <!-- Settings Error State -->
     <div v-else-if="settingsError" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
       <p class="text-red-800">Failed to load settings. Using default permissions.</p>
-      <button @click="fetchAdminSettings" class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm">
+      <button 
+        type="button"
+        @click="fetchAdminSettings" 
+        class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm"
+      >
         Retry
       </button>
     </div>
@@ -91,7 +97,11 @@
     <!-- Student Details Error -->
     <div v-else-if="studentDetailsError" class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
       <p class="text-red-800">Failed to load student details.</p>
-      <button @click="fetchStudentDetails" class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm">
+      <button 
+        type="button"
+        @click="fetchStudentDetails" 
+        class="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm"
+      >
         Retry
       </button>
     </div>
@@ -123,12 +133,23 @@
             />
             <p class="text-xs text-gray-500 mt-1">Student group cannot be changed</p>
           </div>
-
+          
           <!-- Personal Details Section - Only show if allowed -->
           <div v-if="allowInstructorsModify" class="md:col-span-2 lg:col-span-3">
             <h3 class="text-lg font-medium text-gray-800 mb-4 border-b pb-2">Personal Details</h3>
           </div>
 
+          <!-- Profile Image Component -->
+          <div class="md:col-span-2 lg:col-span-3">
+          <StudentProfileImage
+            :student-id="studentId"
+            :current-image="routeBase64Image"
+            :student-name="studentInfo.student_name"
+            @image-updated="handleImageUpdated"
+            @success="msg => showSuccess(msg)"
+            @error="msg => showError(msg)"
+          />
+          </div>
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
             <input 
@@ -221,7 +242,7 @@
           </div>
         </div>
 
-                <!-- Form Actions -->
+        <!-- Form Actions -->
         <div class="mt-8 pt-6 border-t flex justify-between items-center">
           <div class="flex space-x-3">
             <button 
@@ -495,6 +516,7 @@
 
                         <div class="flex space-x-3 pt-4">
                           <button
+                            type="button"
                             @click="updateGuardianDetails(guardian.guardian)"
                             :disabled="updatingGuardian"
                             class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300 flex items-center space-x-2"
@@ -505,6 +527,7 @@
                             <span>{{ updatingGuardian ? 'Updating...' : 'Update Guardian' }}</span>
                           </button>
                           <button
+                            type="button"
                             @click="cancelEdit"
                             class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
                           >
@@ -516,6 +539,7 @@
                   </div>
 
                   <button
+                    type="button"
                     v-if="editingGuardianId !== guardian.guardian"
                     @click="startEdit(guardian)"
                     class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -530,7 +554,8 @@
             </div>
           </div>
         </div>
-          <div class="text-sm text-gray-600">
+        
+        <div class="text-sm text-gray-600">
           <span v-if="allowInstructorsModify" class="text-green-600">
             ✓ You have full editing permissions
           </span>
@@ -547,6 +572,7 @@
 import { ref, onMounted, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { createResource } from 'frappe-ui'
+import StudentProfileImage from '@/components/StudentProfileImage.vue'
 
 const route = useRoute()
 
@@ -560,7 +586,8 @@ const studentInfo = reactive({
   gr_number: '',
   email_address: '',
   phone_number: '',
-  roll_number: ''
+  roll_number: '',
+  // Remove image since API doesn't provide it
 })
 const studentId = ref('')
 const studentGroup = ref('')
@@ -614,7 +641,31 @@ const isGuardianLimitReached = computed(() => {
   return guardians.value.length >= 3
 })
 
-// Helper functions for alert handling
+// Add this computed property to extract base64 image from route
+const routeBase64Image = computed(() => {
+  if (!route.query.studentData) {
+    console.log('❌ No studentData in route query')
+    return ''
+  }
+  
+  try {
+    const data = JSON.parse(decodeURIComponent(route.query.studentData))
+    const base64Data = data.base64profile || ''
+    
+    console.log('🖼️ Image from route:', {
+      exists: !!base64Data,
+      length: base64Data?.length || 0,
+      type: base64Data?.startsWith('data:') ? 'data-url' : 'base64-raw'
+    })
+    
+    return base64Data
+  } catch (e) {
+    console.error('Error parsing route image data:', e)
+    return ''
+  }
+})
+
+// Alert helpers
 const showError = (message) => {
   errorMessage.value = message
   successMessage.value = ''
@@ -636,7 +687,13 @@ const hideAlert = () => {
   }, 300)
 }
 
-// API Resources with proper error handling
+// Add this method to handle image updates
+const handleImageUpdated = (newImageUrl) => {
+  console.log('📸 Image updated in StudentProfileImage:', newImageUrl)
+  // If you need to store the updated image URL somewhere
+}
+
+// API Resources
 const adminSettingsResource = createResource({
   url: 'school.al_ummah.api3.fetch_admin_settings',
   auto: false,
@@ -645,38 +702,26 @@ const adminSettingsResource = createResource({
     settingsLoading.value = false
     settingsError.value = false
   },
-  onError(error) {
-    console.error('Error fetching admin settings:', error)
+  onError() {
     settingsLoading.value = false
     settingsError.value = true
-    adminSettings.value = {
-      allow_instructors_modify_student: 0,
-      session_expiry: "24:00"
-    }
+    adminSettings.value = { allow_instructors_modify_student: 0, session_expiry: "24:00" }
   }
 })
 
-// New API Resource for getting student details
 const studentDetailsResource = createResource({
   url: 'school.al_ummah.api2.get_student_details',
   auto: false,
   onSuccess(data) {
-    console.log('Student details loaded:', data)
-    
-    // Populate student info
     if (data.student_info) {
       Object.assign(studentInfo, data.student_info)
     }
-    
-    // Populate guardians
     if (data.guardians && Array.isArray(data.guardians)) {
       guardians.value = data.guardians
     }
-    
     studentDetailsError.value = ''
   },
-  onError(error) {
-    console.error('Error fetching student details:', error)
+  onError() {
     studentDetailsError.value = 'Failed to load student details.'
     guardians.value = []
   }
@@ -687,30 +732,14 @@ const updateStudentResource = createResource({
   auto: false,
   onSuccess(data) {
     updateLoading.value = false
-    console.log('Student updated successfully:', data)
-    
-    if (data.success) {
-      showSuccess(data.message || 'Student information updated successfully!')
-    } else {
-      showError(data.message || 'Failed to update student information.')
-    }
+    showSuccess(data.message || 'Student updated successfully!')
   },
   onError(error) {
-    console.error('Error updating student:', error)
     updateLoading.value = false
-    
-    if (error._server_messages) {
-      try {
-        const serverMessages = JSON.parse(error._server_messages || '[]')
-        const lastMessage = serverMessages[serverMessages.length - 1]
-        const parsedMessage = JSON.parse(lastMessage)
-        showError(parsedMessage.message || 'Validation error occurred.')
-      } catch (e) {
-        showError(error.message || 'An unexpected error occurred.')
-      }
-    } else {
-      showError(error.message || 'Failed to update student information. Please try again.')
-    }
+    const msg = error._server_messages
+      ? JSON.parse(JSON.parse(error._server_messages.at(-1))?.message || '{}')?.message
+      : error.message
+    showError(msg || 'Update failed.')
   }
 })
 
@@ -719,30 +748,16 @@ const addGuardianResource = createResource({
   auto: false,
   onSuccess(data) {
     addingGuardian.value = false
-    if (data.success) {
-      showSuccess(data.message || 'Guardian added successfully!')
-      fetchStudentDetails() // Refresh the data
-      resetNewGuardianForm()
-    } else {
-      showError(data.message || 'Failed to add guardian.')
-    }
+    showSuccess(data.message || 'Guardian added!')
+    fetchStudentDetails()
+    resetNewGuardianForm()
   },
   onError(error) {
-    console.error('Error adding guardian:', error)
     addingGuardian.value = false
-    
-    if (error._server_messages) {
-      try {
-        const serverMessages = JSON.parse(error._server_messages || '[]')
-        const lastMessage = serverMessages[serverMessages.length - 1]
-        const parsedMessage = JSON.parse(lastMessage)
-        showError(parsedMessage.message || 'Failed to add guardian.')
-      } catch (e) {
-        showError(error.message || 'Failed to add guardian. Please try again.')
-      }
-    } else {
-      showError(error.message || 'Failed to add guardian. Please try again.')
-    }
+    const msg = error._server_messages
+      ? JSON.parse(JSON.parse(error._server_messages.at(-1))?.message || '{}')?.message
+      : error.message
+    showError(msg || 'Failed to add guardian.')
   }
 })
 
@@ -751,74 +766,40 @@ const updateGuardianDetailsResource = createResource({
   auto: false,
   onSuccess(data) {
     updatingGuardian.value = false
-    if (data.success) {
-      showSuccess(data.message || 'Guardian details updated successfully!')
-      editingGuardianId.value = null
-      resetEditedGuardianForm()
-      fetchStudentDetails() // Refresh the data
-    } else {
-      showError(data.message || 'Failed to update guardian details.')
-    }
+    showSuccess(data.message || 'Guardian updated!')
+    editingGuardianId.value = null
+    resetEditedGuardianForm()
+    fetchStudentDetails()
   },
   onError(error) {
-    console.error('Error updating guardian details:', error)
     updatingGuardian.value = false
-    
-    if (error._server_messages) {
-      try {
-        const serverMessages = JSON.parse(error._server_messages || '[]')
-        const lastMessage = serverMessages[serverMessages.length - 1]
-        const parsedMessage = JSON.parse(lastMessage)
-        showError(parsedMessage.message || 'Failed to update guardian details.')
-      } catch (e) {
-        showError(error.message || 'Failed to update guardian details. Please try again.')
-      }
-    } else {
-      showError(error.message || 'Failed to update guardian details. Please try again.')
-    }
+    const msg = error._server_messages
+      ? JSON.parse(JSON.parse(error._server_messages.at(-1))?.message || '{}')?.message
+      : error.message
+    showError(msg || 'Failed to update guardian.')
   }
 })
 
-// Helper functions
-const isValidPhoneNumber = (number) => {
-  return /^[0-9]{10}$/.test(number)
-}
+// Validation
+const isValidPhoneNumber = (number) => /^[0-9]{10}$/.test(number)
 
 const preventDecimal = (event) => {
-  if (event.key === '.' || event.key === ',' || event.key === 'e' || event.key === 'E' || event.key === '-') {
+  if (['.', ',', 'e', 'E', '-'].includes(event.key)) {
     event.preventDefault()
   }
 }
 
 const validateRollNumber = () => {
-  const rollNumber = studentInfo.roll_number
-  
-  // Allow empty roll number (optional field)
-  if (!rollNumber && rollNumber !== 0) {
-    rollNumberError.value = ''
-    return
-  }
-  
-  const numValue = Number(rollNumber)
-  
-  if (!Number.isInteger(numValue)) {
-    rollNumberError.value = 'Roll number must be a whole number'
-    return
-  }
-  
-  if (numValue < 1) {
-    rollNumberError.value = 'Roll number must be at least 1'
-    return
-  }
-  
-  if (numValue > 999) {
-    rollNumberError.value = 'Roll number cannot exceed 999'
-    return
-  }
-  
+  const val = studentInfo.roll_number
+  if (!val && val !== 0) return rollNumberError.value = ''
+  const num = Number(val)
+  if (!Number.isInteger(num)) return rollNumberError.value = 'Must be a whole number'
+  if (num < 1) return rollNumberError.value = 'Must be at least 1'
+  if (num > 999) return rollNumberError.value = 'Cannot exceed 999'
   rollNumberError.value = ''
 }
 
+// Guardian form helpers
 const resetNewGuardianForm = () => {
   newGuardian.guardian_name = ''
   newGuardian.phone_number = ''
@@ -832,51 +813,33 @@ const resetEditedGuardianForm = () => {
   editedGuardian.relation = 'Mother'
 }
 
-// Fetch student details
-const fetchStudentDetails = () => {
-  if (!studentId.value) return
-  
-  studentDetailsResource.fetch({
-    student: studentId.value
-  })
-}
-
-// Guardian management functions
+// Guardian actions
 const addGuardian = async () => {
-  if (!isValidPhoneNumber(newGuardian.phone_number)) {
-    showError('Please enter a valid 10-digit phone number.')
-    return
-  }
-
-  if (!newGuardian.guardian_name.trim()) {
-    showError('Please enter guardian name.')
-    return
-  }
-
+  if (!newGuardian.guardian_name.trim()) return showError('Guardian name required')
+  if (!isValidPhoneNumber(newGuardian.phone_number)) return showError('Valid 10-digit phone required')
   addingGuardian.value = true
-  const params = {
+  addGuardianResource.fetch({
     student_id: studentId.value,
     student_name: `${studentInfo.first_name} ${studentInfo.last_name}`.trim(),
     guardian_name: newGuardian.guardian_name,
     relation: newGuardian.relation,
-    phone_number: newGuardian.phone_number,
-  }
-
-  addGuardianResource.fetch(params)
+    phone_number: newGuardian.phone_number
+  })
 }
 
 const startEdit = (guardian) => {
   editingGuardianId.value = guardian.guardian
-  // Populate the edit form with current guardian data
-  editedGuardian.guardian_name = guardian.guardian_name || ''
-  editedGuardian.mobile_number = guardian.mobile_number || ''
-  editedGuardian.relation = guardian.relation || 'Mother'
-  editedGuardian.date_of_birth = guardian.date_of_birth || ''
-  editedGuardian.email = guardian.email || ''
-  editedGuardian.occupation = guardian.occupation || ''
-  editedGuardian.designation = guardian.designation || ''
-  editedGuardian.work_address = guardian.work_address || ''
-  editedGuardian.education = guardian.education || ''
+  Object.assign(editedGuardian, {
+    guardian_name: guardian.guardian_name || '',
+    mobile_number: guardian.mobile_number || '',
+    relation: guardian.relation || 'Mother',
+    date_of_birth: guardian.date_of_birth || '',
+    email: guardian.email || '',
+    occupation: guardian.occupation || '',
+    designation: guardian.designation || '',
+    work_address: guardian.work_address || '',
+    education: guardian.education || ''
+  })
 }
 
 const cancelEdit = () => {
@@ -885,19 +848,10 @@ const cancelEdit = () => {
 }
 
 const updateGuardianDetails = (guardianId) => {
-  if (!isValidPhoneNumber(editedGuardian.mobile_number)) {
-    showError('Please enter a valid 10-digit phone number.')
-    return
-  }
-
-  if (!editedGuardian.guardian_name.trim()) {
-    showError('Please enter guardian name.')
-    return
-  }
-
+  if (!editedGuardian.guardian_name.trim()) return showError('Guardian name required')
+  if (!isValidPhoneNumber(editedGuardian.mobile_number)) return showError('Valid 10-digit phone required')
   updatingGuardian.value = true
-
-  const params = {
+  updateGuardianDetailsResource.fetch({
     guardian_id: guardianId,
     guardian_name: editedGuardian.guardian_name,
     phone_number: editedGuardian.mobile_number,
@@ -908,25 +862,31 @@ const updateGuardianDetails = (guardianId) => {
     designation: editedGuardian.designation,
     work_address: editedGuardian.work_address,
     education: editedGuardian.education
+  })
+}
+
+const updateStudent = async (event) => {
+  // Debug: log what triggered this
+  console.log('🚨 updateStudent called', {
+    eventType: event?.type,
+    target: event?.target?.tagName,
+    timestamp: new Date().toISOString(),
+    studentId: studentId.value
+  })
+  
+  // Prevent default form behavior
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  
+  // Early return if no changes detected
+  if (!hasFormChanges()) {
+    console.log('No changes detected, skipping update')
+    showError('No changes to update')
+    return
   }
 
-  updateGuardianDetailsResource.fetch(params)
-}
-
-// Fetch admin settings
-const fetchAdminSettings = () => {
-  settingsLoading.value = true
-  settingsError.value = false
-  adminSettingsResource.fetch()
-}
-
-// Update student function
-const updateStudent = async () => {
-  // Clear previous messages
-  errorMessage.value = ''
-  successMessage.value = ''
-  
-  // Validate roll number before submission
   validateRollNumber()
   if (rollNumberError.value) {
     showError(rollNumberError.value)
@@ -934,49 +894,65 @@ const updateStudent = async () => {
   }
 
   updateLoading.value = true
-  
-  try {
-    const updateData = {
-      student_id: studentId.value,
-      student_group: studentGroup.value,
-    }
-
-    if (allowInstructorsModify.value) {
-      updateData.first_name = studentInfo.first_name || ''
-      updateData.middle_name = studentInfo.middle_name || ''
-      updateData.last_name = studentInfo.last_name || ''
-      updateData.student_date_of_birth = studentInfo.student_date_of_birth || ''
-      updateData.gr_number = studentInfo.gr_number || ''
-      updateData.email_address = studentInfo.email_address || ''
-      updateData.phone_number = studentInfo.phone_number || ''
-      updateData.roll_number = studentInfo.roll_number || ''
-    }
-
-    console.log('Sending update data:', updateData)
-    await updateStudentResource.fetch(updateData)
-    
-  } catch (error) {
-    console.error('Error in update student:', error)
-    updateLoading.value = false
-    showError('An unexpected error occurred. Please try again.')
+  const data = {
+    student_id: studentId.value,
+    student_group: studentGroup.value
   }
+
+  if (allowInstructorsModify.value) {
+    Object.assign(data, {
+      first_name: studentInfo.first_name || '',
+      middle_name: studentInfo.middle_name || '',
+      last_name: studentInfo.last_name || '',
+      student_date_of_birth: studentInfo.student_date_of_birth || '',
+      gr_number: studentInfo.gr_number || '',
+      email_address: studentInfo.email_address || '',
+      phone_number: studentInfo.phone_number || '',
+      roll_number: studentInfo.roll_number || ''
+    })
+  }
+
+  console.log('Sending update data:', data)
+  await updateStudentResource.fetch(data)
 }
 
+// Add change detection
+const hasFormChanges = () => {
+  // You can implement logic to check if any fields have actually changed
+  // For now, return true to allow updates
+  return true
+}
+
+// Fetchers
+const fetchStudentDetails = () => {
+  if (!studentId.value) return
+  studentDetailsResource.fetch({ student: studentId.value })
+}
+
+const fetchAdminSettings = () => {
+  settingsLoading.value = true
+  adminSettingsResource.fetch()
+}
+
+// Lifecycle
 onMounted(() => {
   studentId.value = route.query.studentId
-  
+
   if (route.query.studentData) {
     try {
-      const studentData = JSON.parse(decodeURIComponent(route.query.studentData))
-      console.log('Student ID:', studentId.value)
-      console.log('Complete student data:', studentData)
+      const data = JSON.parse(decodeURIComponent(route.query.studentData))
+      studentGroup.value = data.student_group || ''
       
-      // Set student group from the data
-      studentGroup.value = studentData.student_group || ''
+      console.log('🎯 Route data analysis:', {
+        studentGroup: studentGroup.value,
+        hasBase64profile: !!data.base64profile,
+        base64profileLength: data.base64profile?.length || 0,
+        allKeys: Object.keys(data) // See all available data
+      })
       
-    } catch (error) {
-      console.error('Error parsing student data:', error)
-      showError('Failed to load student data.')
+    } catch (e) {
+      console.error('Error parsing student data:', e)
+      showError('Invalid student data')
     }
   }
 
@@ -1004,11 +980,6 @@ onMounted(() => {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
 /* Alert Animations */
 .animate-slide-in-right {
   animation: slideInRight 0.3s ease-out;
@@ -1016,6 +987,11 @@ onMounted(() => {
 
 .animate-slide-out-right {
   animation: slideOutRight 0.3s ease-in;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @keyframes slideInRight {

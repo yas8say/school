@@ -11,19 +11,10 @@ from frappe.utils.dateutils import get_dates_from_timegrain
 from frappe.model.document import Document
 from frappe.utils.file_manager import save_file
 
-
-
-
-
 import requests
 
 import base64
 from frappe.utils.file_manager import save_file
-
-
-from frappe.auth import LoginManager
-
-
 
 
 from frappe.auth import LoginManager
@@ -348,7 +339,7 @@ def update_student_details(
     student_group=None
 ):
     """
-    Updates Student details and linked User.
+    Updates Student details, linked User, and linked Customer (via Student.customer).
     Also sets student_name = first + middle + last.
     Updates student's name and roll number inside the given Student Group (without re-adding).
     """
@@ -364,6 +355,7 @@ def update_student_details(
         user_id = student_doc.user
         print(f"🧾 Student: {student_doc.name}")
         print(f"👤 Linked User: {user_id}")
+        print(f"🏷️ Linked Customer: {student_doc.customer}")
 
         # 2️⃣ Update linked User first
         if user_id and frappe.db.exists("User", user_id):
@@ -461,12 +453,23 @@ def update_student_details(
             else:
                 print(f"⚠️ Student not found in group: {student_group}")
 
+        # 6️⃣ Update linked Customer name (via Student.customer)
+        if student_doc.customer and frappe.db.exists("Customer", student_doc.customer):
+            customer_doc = frappe.get_doc("Customer", student_doc.customer)
+            customer_doc.customer_name = student_doc.student_name
+            customer_doc.flags.ignore_permissions = True
+            customer_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+            print(f"✅ Customer '{customer_doc.name}' updated with new name: {student_doc.student_name}")
+        else:
+            print("ℹ️ No linked Customer found for this Student")
+
         # Reload for confirmation
         student_doc.reload()
 
         return {
             "success": True,
-            "message": "Student, linked User, and Student Group updated successfully.",
+            "message": "Student, linked User, Customer, and Student Group updated successfully.",
             "student": student_doc.name,
             "user": user_id or "N/A",
             "student_name": student_doc.student_name,
@@ -570,7 +573,88 @@ def update_guardian_details(
         frappe.log_error(f"Unexpected Error: {str(e)}", "Update Guardian Details")
         return {"success": False, "message": f"Error: {str(e)}"}
 
+@frappe.whitelist(allow_guest=True)
+def update_student_profile_image(student_id, base64_image):
+    try:
+        print("User:", frappe.session.user)
 
+        # Decode base64 image
+        image_data = base64.b64decode(base64_image.split(",")[1])
+        file_name = f"{student_id}_profile.jpg"
+
+        # Save file
+        saved_file = save_file(
+            fname=file_name,
+            content=image_data,
+            dt="Student",
+            dn=student_id,
+            is_private=0
+        )
+        print("File URL:", saved_file.file_url)
+
+        # Update Student image field
+        student_doc = frappe.get_doc("Student", student_id)
+        student_doc.image = saved_file.file_url
+        student_doc.save(ignore_permissions=True)
+        print(f"Updated Student image: {student_id}")
+
+        # # Update Customer doctype image field - ROBUST VERSION
+        # try:
+        #     # Method 1: Get customer from student.customer field
+        #     customer_name = None
+            
+        #     # Check student document for customer field
+        #     if student_doc.get('customer'):
+        #         customer_name = student_doc.customer
+        #         print(f"Found customer via student.customer: {customer_name}")
+            
+        #     # Method 2: If no customer field, try to find by student name
+        #     if not customer_name:
+        #         customers = frappe.get_all("Customer", 
+        #             filters={"student": student_id},
+        #             fields=["name"]
+        #         )
+        #         if customers:
+        #             customer_name = customers[0].name
+        #             print(f"Found customer via Customer.student: {customer_name}")
+            
+        #     # Method 3: Try to find by student name in customer name
+        #     if not customer_name:
+        #         student_name = student_doc.student_name
+        #         customers = frappe.get_all("Customer", 
+        #             filters={"customer_name": ["like", f"%{student_name}%"]},
+        #             fields=["name"]
+        #         )
+        #         if customers:
+        #             customer_name = customers[0].name
+        #             print(f"Found customer by name similarity: {customer_name}")
+            
+        #     # Update customer if found
+        #     if customer_name and frappe.db.exists("Customer", customer_name):
+        #         print(f"Updating customer: {customer_name}")
+                
+        #         # Direct SQL update to avoid field validation issues
+        #         frappe.db.set_value('Customer', customer_name, 'image', saved_file.file_url)
+        #         print(f"Successfully updated customer image: {customer_name}")
+                
+        #     else:
+        #         print(f"No customer found to update for student: {student_id}")
+                
+        # except Exception as cust_error:
+        #     print(f"Warning: Could not update customer image: {str(cust_error)}")
+        #     frappe.log_error(f"Customer image update failed: {str(cust_error)}")
+
+        frappe.db.commit()
+
+        return {
+            "status": "success", 
+            "message": "Profile image updated successfully.",
+            "image_url": saved_file.file_url
+        }
+    except Exception as e:
+        frappe.log_error(f"Error updating profile image: {str(e)}")
+        frappe.db.rollback()
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
 @frappe.whitelist(allow_guest=True)
 def update_guardian_phone(guardian_id, phone_number):
@@ -2283,7 +2367,7 @@ def add_guardian_to_student(student_id, student_name, guardian_name, relation, p
                 "first_name": guardian_name,
                 "email": guardian_email
             }).insert(ignore_permissions=True)
-
+            user_doc.new_password = "alummah"
             user_doc.add_roles("Guardian")
             
             guardian_doc = frappe.get_doc({
