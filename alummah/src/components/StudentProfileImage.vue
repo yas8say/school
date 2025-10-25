@@ -239,17 +239,32 @@ const uploadResource = createResource({
   auto: false,
   onSuccess(data) {
     uploading.value = false
+    console.log('🟢 Upload response details:', {
+      status: data.status,
+      message: data.message,
+      image_url: data.image_url,
+      full_response: data
+    })
+    
     if (data.status === 'success') {
+      console.log('✅ Upload successful, updating UI with image:', data.image_url)
       emit('image-updated', data.image_url)
-      emit('success', data.message || 'Profile image updated!')
+      emit('success', data.message || 'Profile image updated successfully!')
       resetAll()
+      
+      // Force refresh the student data
+      setTimeout(() => {
+        window.location.reload() // Temporary fix to see changes
+      }, 1000)
     } else {
+      console.error('❌ Upload failed:', data.message)
       emit('error', data.message || 'Upload failed')
     }
   },
   onError(err) {
     uploading.value = false
-    emit('error', err.message || 'Upload error')
+    console.error('🔴 Upload error:', err)
+    emit('error', err.message || 'Upload error occurred')
   }
 })
 
@@ -397,6 +412,12 @@ const doUpload = (base64) => {
       base64Data = base64.substring(commaIndex + 1)
     }
   }
+  
+  console.log('Uploading image data:', {
+    studentId: props.studentId,
+    dataLength: base64Data.length,
+    startsWith: base64Data.substring(0, 20) + '...'
+  })
   
   uploadResource.fetch({ 
     student_id: props.studentId, 
