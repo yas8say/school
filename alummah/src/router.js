@@ -2,6 +2,11 @@ import { createRouter, createWebHistory } from "vue-router"
 
 const routes = [
 	{
+        path: '/edit-student',
+        name: 'EditStudent',
+        component: () => import("@/components/EditStudent.vue"),
+    },
+	{
 		path: "/",
 		name: "Home",
 		redirect: { name: "Login" }
