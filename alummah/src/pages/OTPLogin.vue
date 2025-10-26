@@ -88,19 +88,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { createResource } from 'frappe-ui'
-import { session, setSelectedLoginRole } from "@/data/session"
 
 const router = useRouter()
 const route = useRoute()
 
 // Get role from route query or default to teacher
 const currentRole = ref(route.query.role || 'teacher')
-
-// Set the selected login role globally (like regular login does)
-setSelectedLoginRole(currentRole.value)
 
 // Reactive state
 const phoneNumber = ref('')
@@ -109,43 +104,95 @@ const isPhoneDisabled = ref(false)
 const loading = ref(false)
 const verifying = ref(false)
 
-// Create resources for API calls
-const sendOtpResource = createResource({
-  url: 'school.al_ummah.api2.send_otp_web',
-  onSuccess(data) {
-    console.log('OTP sent successfully:', data)
-    loading.value = false
-    if (data.success) {
-      alert('OTP sent successfully! Check your phone.')
-      isPhoneDisabled.value = true
-    } else {
-      alert(data.message || 'Failed to send OTP. Please try again.')
-    }
-  },
-  onError(error) {
-    console.error('Error sending OTP:', error)
-    loading.value = false
-    alert('Failed to send OTP. Please try again.')
-  }
-})
+// Lazy loaded modules
+let session = null
+let setSelectedLoginRole = null
 
-const verifyOtpResource = createResource({
-  url: 'school.al_ummah.api2.verify_otp_and_create_session',
-  onSuccess(data) {
-    console.log('OTP verified successfully:', data)
-    handleOtpVerificationSuccess(data)
-  },
-  onError(error) {
-    console.error('Error verifying OTP:', error)
-    verifying.value = false
-    alert('Failed to verify OTP. Please check the code and try again.')
+// Load modules dynamically
+const loadModules = async () => {
+  try {
+    // Load session module
+    const sessionModule = await import('@/data/session')
+    session = sessionModule.session
+    setSelectedLoginRole = sessionModule.setSelectedLoginRole
+    
+    // Set the selected login role globally
+    if (setSelectedLoginRole) {
+      setSelectedLoginRole(currentRole.value)
+    }
+  } catch (error) {
+    console.error('Error loading modules:', error)
+    showUniversalPopup('info', 'Error', 'Failed to load required modules. Please refresh the page.')
   }
-})
+}
+
+// UniversalPopup helper function
+function showUniversalPopup(type, title, message) {
+  window.dispatchEvent(new CustomEvent('show-api-message-popup', {
+    detail: {
+      type: type,
+      title: title,
+      message: message
+    }
+  }))
+}
+
+// Event listeners for OTP verification
+const onOtpVerificationSuccess = (event) => {
+  console.log('OTP verification success from session:', event.detail)
+  verifying.value = false
+}
+
+const onOtpVerificationError = (event) => {
+  console.log('OTP verification error from session:', event.detail)
+  verifying.value = false
+  showUniversalPopup('info', 'Verification Failed', 'Failed to verify OTP. Please try again.')
+}
+
+// Set up event listeners
+const setupEventListeners = () => {
+  window.addEventListener('otp-verification-success', onOtpVerificationSuccess)
+  window.addEventListener('otp-verification-error', onOtpVerificationError)
+}
+
+// Clean up event listeners
+const cleanupEventListeners = () => {
+  window.removeEventListener('otp-verification-success', onOtpVerificationSuccess)
+  window.removeEventListener('otp-verification-error', onOtpVerificationError)
+}
+
+// Create resource for send OTP API call only
+const sendOtpResource = {
+  submit: async (params) => {
+    const { createResource } = await import('frappe-ui')
+    
+    const resource = createResource({
+      url: 'school.al_ummah.api2.send_otp_web',
+      onSuccess(data) {
+        console.log('OTP sent successfully:', data)
+        loading.value = false
+        if (data.success) {
+          showUniversalPopup('info', 'OTP Sent', 'OTP sent successfully! Check your phone.')
+          isPhoneDisabled.value = true
+        } else {
+          showUniversalPopup('info', 'OTP Failed', data.message || 'Failed to send OTP. Please try again.')
+        }
+      },
+      onError(error) {
+        console.error('Error sending OTP:', error)
+        loading.value = false
+        showUniversalPopup('info', 'OTP Failed', 'Failed to send OTP. Please try again.')
+      }
+    })
+    
+    return resource.submit(params)
+  }
+}
 
 // Handle send OTP
 const handleSendOtp = async () => {
   if (!phoneNumber.value) {
-    alert('Please enter a valid phone number.')
+    showUniversalPopup('info', 'Missing Information', 'Please enter a valid phone number.')
     return
   }
 
@@ -158,72 +205,68 @@ const handleSendOtp = async () => {
   } catch (error) {
     console.error('Error in send OTP:', error)
     loading.value = false
+    showUniversalPopup('info', 'OTP Failed', 'Failed to send OTP. Please try again.')
   }
 }
 
-// Handle verify OTP
+// Handle verify OTP - now using session.verifyOtp
 const handleVerifyOtp = async () => {
   if (!otp.value) {
-    alert('Please enter the OTP.')
+    showUniversalPopup('info', 'Missing Information', 'Please enter the OTP.')
     return
   }
 
   verifying.value = true
   try {
-    await verifyOtpResource.submit({
-      phone: phoneNumber.value,
-      otp: otp.value,
-      role: currentRole.value === 'parent' ? 'Guardian' : 'Instructor'
-    })
+    if (session && session.verifyOtp) {
+      await session.verifyOtp.submit({
+        phone: phoneNumber.value,
+        otp: otp.value,
+        role: currentRole.value === 'parent' ? 'Guardian' : 'Instructor'
+      })
+    } else {
+      throw new Error('Session module not loaded')
+    }
   } catch (error) {
     console.error('Error in verify OTP:', error)
     verifying.value = false
+    showUniversalPopup('info', 'Verification Failed', 'Failed to verify OTP. Please try again.')
   }
 }
 
-// Handle OTP verification success - mimic the same flow as regular login
-const handleOtpVerificationSuccess = async (data) => {
-  try {
-    if (data.status === 'success') {
-      console.log('OTP login successful, session created on backend')
-      
-      // Store user info
-      localStorage.setItem('user', JSON.stringify({
-        username: data.user,
-        role: currentRole.value,
-        roles: data.roles
-      }))
-      
-      // 2. Update session user (like session.login.onSuccess does)
-      session.user = data.user
-      
-      // 3. Use the same navigation logic as regular login
-      const routeName = currentRole.value === 'parent' ? 'Parenthome' : 'Teacherhome'
-      console.log('Redirecting based on selected role:', currentRole.value, '→', routeName)
-      router.replace({ name: routeName })
-      
-    } else {
-      alert('OTP verification failed. Please try again.')
-      verifying.value = false
-    }
-  } catch (error) {
-    console.error('Error in OTP verification process:', error)
-    alert('Failed to complete login process. Please try again.')
+// Watch for OTP verification errors from session
+watch(() => {
+  if (session) return session.verifyOtp.error
+}, (error) => {
+  if (error) {
     verifying.value = false
+    showUniversalPopup('info', 'Verification Failed', 'Failed to verify OTP. Please check the code and try again.')
   }
-}
+})
+
+// Watch for OTP verification success with error message
+watch(() => {
+  if (session) return session.verifyOtp.data
+}, (data) => {
+  if (data && data.status !== 'success') {
+    verifying.value = false
+    const message = data.message || 'OTP verification failed. Please try again.'
+    showUniversalPopup('info', 'Verification Failed', message)
+  }
+})
 
 // Handle back navigation
 const handleBack = () => {
   router.push({ name: 'Login' })
 }
 
-// Check if user is already logged in - use same logic as regular login
-onMounted(() => {
-  if (session.isLoggedIn) {
-    const routeName = currentRole.value === 'parent' ? 'Parenthome' : 'Teacherhome'
-    router.replace({ name: routeName })
-  }
+onMounted(async () => {
+  await loadModules()
+  setupEventListeners()
+})
+
+onUnmounted(() => {
+  cleanupEventListeners()
 })
 </script>
 

@@ -11,9 +11,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { createResource } from 'frappe-ui'
 
 const router = useRouter()
 const route = useRoute()
@@ -22,61 +21,43 @@ const route = useRoute()
 const currentRole = ref(route.query?.role || 'teacher')
 const loading = ref(false)
 
-// Your web client ID
-const GOOGLE_CLIENT_ID_WEB = "619580422153-9o7kvuuocsjfqejuv2jrud3h986t5prc.apps.googleusercontent.com"
+// Lazy loaded modules
+let googleAuth = null
+let session = null
+let setSelectedLoginRole = null
 
-// Create resource for API calls - updated to match backend endpoint
-const verifyTokenResource = createResource({
-  url: 'school.al_ummah.api2.verify_google_token_and_create_session',
-  onSuccess(data) {
-    console.log('Token verified successfully:', data)
-    handleTokenVerificationSuccess(data)
-  },
-  onError(error) {
-    console.error('Error verifying token:', error)
-    loading.value = false
-    alert(error?.message || 'Failed to verify Google token. Please try again.')
-  }
-})
-
-// Initialize Google Sign-In
-const initializeGoogleSignIn = () => {
-  if (typeof window === 'undefined' || !window.google) {
-    console.log('Google API not loaded yet')
-    return
-  }
-
+// Load modules dynamically
+const loadModules = async () => {
   try {
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID_WEB,
-      callback: handleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      ux_mode: 'popup'
-    })
-
-    // Render Google button
-    window.google.accounts.id.renderButton(
-      document.getElementById('googleSignInButton'),
-      { 
-        theme: 'outline', 
-        size: 'large',
-        width: 280,
-        text: 'signin_with',
-        shape: 'pill',
-        logo_alignment: 'center'
-      }
-    )
-
-    console.log('Google Sign-In initialized successfully')
-
+    // Load session module
+    const sessionModule = await import('@/data/session')
+    googleAuth = sessionModule.googleAuth
+    session = sessionModule.session
+    setSelectedLoginRole = sessionModule.setSelectedLoginRole
+    
+    // Set the selected login role globally
+    if (setSelectedLoginRole) {
+      setSelectedLoginRole(currentRole.value)
+    }
   } catch (error) {
-    console.error('Error initializing Google Sign-In:', error)
+    console.error('Error loading modules:', error)
+    showUniversalPopup('info', 'Error', 'Failed to load required modules. Please refresh the page.')
   }
 }
 
-// Handle credential response from Google
-const handleCredentialResponse = async (response) => {
+// UniversalPopup helper function
+function showUniversalPopup(type, title, message) {
+  window.dispatchEvent(new CustomEvent('show-api-message-popup', {
+    detail: {
+      type: type,
+      title: title,
+      message: message
+    }
+  }))
+}
+
+// Handle Google credential response directly
+const handleGoogleCredentialResponse = async (response) => {
   try {
     loading.value = true
     console.log('Google credential response received', response)
@@ -86,8 +67,8 @@ const handleCredentialResponse = async (response) => {
     const backendRole = currentRole.value === 'parent' ? 'Guardian' : 'Instructor'
     console.log('Sending role to API:', backendRole)
     
-    // Send both id_token and role to the API - matches backend parameters
-    await verifyTokenResource.submit({
+    // Send both id_token and role to the API
+    await session.verifyGoogleToken.submit({
       id_token: response.credential,
       role: backendRole  // Send "Instructor" or "Guardian" to backend
     })
@@ -95,103 +76,128 @@ const handleCredentialResponse = async (response) => {
   } catch (error) {
     console.error('Error handling credential response:', error)
     loading.value = false
-    alert('Failed to process Google sign in.')
+    showUniversalPopup('info', 'Sign-In Failed', 'Failed to process Google sign in. Please try again.')
   }
 }
 
-// Handle token verification success - simplified for session-based auth
-const handleTokenVerificationSuccess = async (data) => {
-  try {
-    if (data.success) {
-      console.log('Google authentication successful:', data)
-      
-      // Store user info in localStorage
-      localStorage.setItem('user', JSON.stringify({
-        username: data.user,
-        email: data.email,
-        role: currentRole.value,  // Store frontend role (teacher/parent)
-        roles: data.roles
-      }))
-
-      // Store session info
-      if (data.sid) {
-        localStorage.setItem('session_id', data.sid)
-      }
-
-      // Since we're using session-based authentication, we need to update
-      // the Frappe UI session state to recognize we're logged in
-      try {
-        // Import session to update the state
-        const { session } = await import('@/data/session')
-        session.user = data.user
-        session.isLoggedIn = true
-        
-        // Navigate to appropriate home based on frontend role
-        const routeName = currentRole.value === 'parent' ? 'Parenthome' : 'Teacherhome'
-        console.log('Navigating to:', routeName)
-        router.replace({ name: routeName })
-        
-      } catch (sessionError) {
-        console.error('Error updating session:', sessionError)
-        // Fallback: navigate directly
-        const routeName = currentRole.value === 'parent' ? 'Parenthome' : 'Teacherhome'
-        router.replace({ name: routeName })
-      }
-      
-    } else {
-      alert(data.error || 'Authentication failed. Please try again.')
-      loading.value = false
-    }
-  } catch (error) {
-    console.error('Error in token verification process:', error)
-    alert('Failed to complete login process. Please try again.')
+// Watch for Google auth errors from session
+watch(() => {
+  if (session) return session.verifyGoogleToken.error
+}, (error) => {
+  if (error) {
     loading.value = false
+    console.log('Google auth error from session:', error)
+    if (error.message && (error.message.includes('CSRF') || error.message.includes('session'))) {
+      showUniversalPopup('csrf', 'Session Conflict', 'It seems you\'re already logged in. Please logout from other sessions to continue.')
+    } else {
+      const message = error.message || 'Failed to verify Google token. Please try again.'
+      showUniversalPopup('info', 'Google Sign-In Failed', message)
+    }
   }
-}
+})
 
-// Load Google API script
-const loadGoogleScript = () => {
-  return new Promise((resolve, reject) => {
-    if (document.getElementById('google-js-sdk')) {
-      resolve()
-      return
+// Watch for Google auth success with error message
+watch(() => {
+  if (session) return session.verifyGoogleToken.data
+}, (data) => {
+  if (data && !data.success) {
+    loading.value = false
+    console.log('Google auth failed with data:', data)
+    const message = data.error || 'Google authentication failed. Please try again.'
+    showUniversalPopup('info', 'Authentication Failed', message)
+  }
+})
+
+// Watch for Google auth loading state
+watch(() => {
+  if (session) return session.verifyGoogleToken.loading
+}, (isLoading) => {
+  loading.value = isLoading
+})
+
+// Initialize Google Sign-In
+const initializeGoogleSignIn = async () => {
+  await loadModules()
+  
+  if (googleAuth && window.google) {
+    try {
+      // Initialize Google Sign-In with direct callback
+      window.google.accounts.id.initialize({
+        client_id: googleAuth.CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        ux_mode: 'popup'
+      })
+
+      // Render Google button
+      window.google.accounts.id.renderButton(
+        document.getElementById('googleSignInButton'),
+        { 
+          theme: 'outline', 
+          size: 'large',
+          width: 280,
+          text: 'signin_with',
+          shape: 'pill',
+          logo_alignment: 'center'
+        }
+      )
+
+      console.log('Google Sign-In initialized successfully')
+      
+    } catch (error) {
+      console.error('Error initializing Google Sign-In:', error)
+      showUniversalPopup('info', 'Initialization Error', 'Failed to initialize Google Sign-In. Please refresh the page.')
     }
-
-    const script = document.createElement('script')
-    script.id = 'google-js-sdk'
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => {
+  } else {
+    // Load Google script first
+    try {
+      await googleAuth.loadScript()
+      
+      // Initialize Google button after script loads
       setTimeout(() => {
-        initializeGoogleSignIn()
-        resolve()
-      }, 100)
+        if (window.google) {
+          window.google.accounts.id.initialize({
+            client_id: googleAuth.CLIENT_ID,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            ux_mode: 'popup'
+          })
+
+          window.google.accounts.id.renderButton(
+            document.getElementById('googleSignInButton'),
+            { 
+              theme: 'outline', 
+              size: 'large',
+              width: 280,
+              text: 'signin_with',
+              shape: 'pill',
+              logo_alignment: 'center'
+            }
+          )
+          console.log('Google Sign-In initialized successfully')
+        } else {
+          showUniversalPopup('info', 'Load Error', 'Google Sign-In failed to load. Please check your connection.')
+        }
+      }, 500)
+      
+    } catch (error) {
+      console.error('Failed to load Google Sign-In:', error)
+      showUniversalPopup('info', 'Load Error', 'Failed to load Google Sign-In. Please check your connection.')
     }
-    script.onerror = () => {
-      console.error('Failed to load Google Sign-In script')
-      reject(new Error('Failed to load Google Sign-In'))
-    }
-    document.head.appendChild(script)
-  })
+  }
 }
 
 onMounted(async () => {
-  // Check if already logged in
-  const userData = localStorage.getItem('user')
-  if (userData) {
-    const user = JSON.parse(userData)
-    if (user.role) {
-      router.replace({ name: user.role === 'parent' ? 'Parenthome' : 'Teacherhome' })
-      return
-    }
-  }
-  
-  // Load Google Sign-In
-  try {
-    await loadGoogleScript()
-  } catch (error) {
-    console.error('Failed to load Google Sign-In:', error)
+  // Initialize Google Sign-In
+  await initializeGoogleSignIn()
+})
+
+onUnmounted(() => {
+  // Clean up any Google Sign-In instances
+  if (window.google && window.google.accounts && window.google.accounts.id) {
+    window.google.accounts.id.cancel()
   }
 })
 </script>

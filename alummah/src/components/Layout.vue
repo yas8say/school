@@ -1,78 +1,116 @@
-<template>
-    <div class="flex min-h-screen bg-gray-50 flex-col md:flex-row">
-      <!-- Mobile Toggle -->
-      <div class="md:hidden p-4 bg-white shadow">
-        <button
-          @click="showSidebar = !showSidebar"
-          class="px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          {{ showSidebar ? 'Close Menu' : 'Open Menu' }}
-        </button>
-      </div>
+import { userResource } from "@/data/user"
+import { createRouter, createWebHistory } from "vue-router"
+import { session, selectedLoginRole } from "./data/session"
+
+const routes = [
+	{
+		path: "/",
+		name: "Home",
+		redirect: (to) => {
+			// Redirect to appropriate home based on login status and role
+			if (session.isLoggedIn) {
+				const userRole = userResource.data?.role
+				if (userRole === "Instructor") return { name: "Teacherhome" }
+				if (userRole === "Guardian") return { name: "Parenthome" }
+			}
+			return { name: "Login" }
+		}
+	},
+	{
+		path: "/",
+		name: "EditStudent",
+		component: () => import("@/components/EditStudent.vue"),
+	},
+	{
+		name: "Login",
+		path: "/account/login",
+		component: () => import("@/pages/Login.vue"),
+	},
+	{
+		name: "Teacherhome",
+		path: "/teacher-home",
+		component: () => import("@/pages/TeacherHome.vue"),
+	},
+	{
+		name: "Parenthome", 
+		path: "/parent-home",
+		component: () => import("@/pages/ParentHome.vue"),
+	},
+	{
+		name: "ForgotPassword",
+		path: "/forgot-password",
+		component: () => import("@/pages/ForgotPassword.vue"),
+	},
+	{
+		name: "OTPLogin",
+		path: "/otp-login",
+		component: () => import("@/pages/OTPLogin.vue"),
+	},
+	{
+		name: "SignInScreen",
+		path: "/google-signin",
+		component: () => import("@/pages/SignInScreen.vue"),
+	},
+	{
+		name: "TeacherSignup",
+		path: "/teacher/signup",
+		component: () => import("@/pages/TeacherSignup.vue"),
+	},
+	{
+		name: "ParentSignup",
+		path: "/parent/signup",
+		component: () => import("@/pages/ParentSignup.vue"),
+	},
+	
+	// REMOVED: All the component routes since they're now embedded in TeacherHome/ParentHome
+]
+
+const router = createRouter({
+	history: createWebHistory("/alummah"),
+	routes,
+})
+
+// In your router file
+// In your router file
+router.beforeEach(async (to, from, next) => {
+  console.log("Route guard: from", from.name, "to", to.name)
   
-      <!-- Sidebar -->
-      <aside
-        :class="[
-          'bg-white shadow-md p-6 space-y-8 md:block',
-          showSidebar ? 'block' : 'hidden',
-          'md:w-72'
-        ]"
-      >
-        <!-- Admin Info Card -->
-        <div class="flex items-center space-x-4 border-b pb-4">
-          <div class="w-16 h-16 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
-            <img
-              v-if="admin.image"
-              :src="`data:image/jpeg;base64,${admin.image}`"
-              alt="Admin"
-              class="object-cover w-full h-full"
-            />
-            <span v-else class="text-sm text-gray-500">No Image</span>
-          </div>
-          <div>
-            <h2 class="text-xl font-semibold text-gray-800">{{ admin.name || 'No Name' }}</h2>
-            <p class="text-sm text-gray-500">{{ admin.role || 'Admin' }}</p>
-          </div>
-        </div>
+  let isLoggedIn = session.isLoggedIn
+  let userData = null
   
-        <!-- Navigation Buttons -->
-        <nav class="space-y-3">
-          <router-link to="/attendance" class="block">
-            <button class="w-full text-left px-4 py-2 rounded hover:bg-blue-100 bg-blue-50 text-blue-800 font-medium">
-              Attendance Portal
-            </button>
-          </router-link>
-        </nav>
+  try {
+    await userResource.promise
+    userData = userResource.data
+  } catch (error) {
+    isLoggedIn = false
+  }
+
+  console.log("User is logged in:", isLoggedIn)
+  console.log("User data:", userData)
+
+  // Define public routes that don't require authentication
+  const publicRoutes = ['Login', 'ForgotPassword', 'OTPLogin', 'SignInScreen', 'TeacherSignup', 'ParentSignup']
   
-        <!-- Logout Button -->
-        <div class="pt-4 border-t">
-          <button
-            class="w-full px-4 py-2 rounded bg-red-100 text-red-600 font-medium hover:bg-red-200"
-            @click="logout"
-          >
-            Logout
-          </button>
-        </div>
-      </aside>
-  
-      <!-- Main Content -->
-      <main class="flex-1 p-4 md:p-10 bg-white shadow-inner">
-        <router-view />
-      </main>
-    </div>
-  </template>
-  
-  <script setup>
-  import { ref } from 'vue'
-  import { session } from '../data/session'
-  
-  const admin = ref({
-    name: 'Admin User',
-    role: 'Admin',
-    image: null
-  })
-  
-  const logout = session.logout.submit
-  const showSidebar = ref(false)
-  </script>
-  
+  if (to.name === "Login" && isLoggedIn) {
+    // Check user role and redirect accordingly
+    const userRole = userData?.role || ''
+    console.log("User role:", userRole)
+    
+    if (userRole === "Instructor" || userRole === "Guardian") {
+      const routeName = selectedLoginRole === "parent" ? "Parenthome" : "Teacherhome"
+      console.log("Redirecting to:", routeName, "based on role:", userRole)
+      next({ name: routeName })
+    } else {
+      console.log("User role not Instructor or Guardian, allowing Login page")
+      next()
+    }
+  } else if (!publicRoutes.includes(to.name) && !isLoggedIn) {
+    console.log("User not logged in, redirecting to Login")
+    next({ name: "Login" })
+  } else {
+    console.log("Allowing navigation to:", to.name)
+    next()
+  }
+})
+
+export default router

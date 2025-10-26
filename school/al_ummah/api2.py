@@ -61,8 +61,7 @@ def login(usr, pwd, role=None):
         return {
             "status": "success",
             "user": user,
-            "role": role,
-            "user_roles": user_roles,
+            "roles": user_roles,
             "sid": frappe.session.sid,
             "message": "Logged In"
         }
@@ -73,8 +72,24 @@ def login(usr, pwd, role=None):
     except Exception as e:
         frappe.throw(f"Unexpected error: {str(e)}", frappe.ValidationError)
 
+import frappe
+from frappe import _
 
-
+@frappe.whitelist(allow_guest=False)
+def get_user_roles():
+    """Get the current user's roles"""
+    try:
+        if frappe.session.user == "Guest":
+            frappe.throw(_("Not logged in"))
+        
+        user_roles = frappe.get_roles(frappe.session.user)
+        # Return just the array of roles directly
+        return user_roles
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting user roles: {str(e)}")
+        # Return empty array on error
+        return []
 
 def send_push_message(token, title, body, extra=None):
     headers = {
@@ -852,7 +867,10 @@ def send_otp(phone: str):
     user_exists = frappe.db.exists("User", {"mobile_no": phone})
 
     if not user_exists:
-        return {"success": False, "message": "Phone number not registered!"}
+        frappe.throw(
+            "User does not exist. Try again with a different number.",
+            frappe.PermissionError
+        )
 
     url = "https://control.msg91.com/api/v5/otp"
 
@@ -1069,9 +1087,23 @@ def get_user_name_with_phone(phone: str):
 
 import requests
 
+
 from frappe.auth import LoginManager
 
 GOOGLE_OAUTH2_URL = "https://oauth2.googleapis.com/tokeninfo"
+
+# Add this to your Frappe app's Python file (e.g., your_app/hooks.py or a custom API file)
+
+import frappe
+from frappe import _
+
+@frappe.whitelist(allow_guest=True)
+def trigger_csrf_error():
+    """
+    Dummy function to simulate CSRF error scenarios
+    This would typically be called when the login page is visited
+    """
+    return
 
 @frappe.whitelist(allow_guest=True)
 def verify_google_token_and_create_session(id_token: str, role: str = None):
@@ -1537,7 +1569,6 @@ def get_guardian_app_data(guardian_id):
     # print(response)
     return response
 
-
 @frappe.whitelist()
 def get_student_app_data(studentID):
     from frappe.utils import today
@@ -1545,55 +1576,51 @@ def get_student_app_data(studentID):
     response = {}
     try:
         print(f"🔍 Received studentID: {studentID}, type: {type(studentID)}")
-        
+
         # Handle case where studentID might be a stringified object
-        if isinstance(studentID, str) and studentID.startswith('{'):
+        if isinstance(studentID, str) and studentID.startswith("{"):
             import json
             try:
                 student_data = json.loads(studentID)
-                # Extract the actual student ID from the object
-                studentID = student_data.get('student') or student_data.get('name')
+                studentID = student_data.get("student") or student_data.get("name")
                 print(f"📦 Extracted student ID from object: {studentID}")
             except json.JSONDecodeError:
                 pass
-        
-        # If we still don't have a valid student ID, return error
+
+        # Validate input
         if not studentID:
             frappe.throw("Student ID is required")
-        
+
         print(f"🎯 Fetching student with ID: {studentID}")
 
-        # Fetch the student document
+        # Fetch the student record
         student = frappe.get_doc("Student", studentID)
-
         if not student:
             frappe.throw(f"Student {studentID} not found")
 
         # Get the current program and student group
         current_program = get_current_enrollment(student.name)
         student_groups = get_student_groups(student.name, current_program.program)
-
         if not student_groups:
             frappe.throw("Student group not found")
 
         student_group = student_groups[0]["label"]
+
+        # Fetch student details from the group
         studentDetails = frappe.get_doc("Student Group Student", {
             "student": student.name,
             "parent": student_group,
             "active": 1
         })
 
-        # Fetch profile image as base64
-        profile = student.image
-        base64image = None
-        if profile:
-            base64image = convert_image_to_base64(profile)
+        # Profile image as base64
+        base64image = convert_image_to_base64(student.image) if student.image else None
 
-        # Add basic details to response
+        # Basic details
         response.update({
             "base64profile": base64image,
             "name": studentDetails.student_name,
-            "student": student.name,  # Make sure this is included
+            "student": student.name,
             "student_name": studentDetails.student_name,
             "group_roll_no": studentDetails.group_roll_number,
             "student_group": student_group,
@@ -1601,60 +1628,184 @@ def get_student_app_data(studentID):
             "address": student.address_line_1,
         })
 
-        # Split student group into class and section
-        parts = student_group.split('-')
+        # Split class and section
+        parts = student_group.split("-")
         if len(parts) == 2:
             response["class"] = parts[0]
             response["section"] = parts[1]
 
-        # Attendance calculation
+        # Today's attendance
         date = today()
         StudentAttendance = frappe.qb.DocType("Student Attendance")
 
-        # Fetch today's attendance
         today_attendance = (
             frappe.qb.from_(StudentAttendance)
             .select(StudentAttendance.status)
             .where(
-                (StudentAttendance.student == student.name) &
-                (StudentAttendance.student_group == student_group) &
-                (StudentAttendance.date == date)
+                (StudentAttendance.student == student.name)
+                & (StudentAttendance.student_group == student_group)
+                & (StudentAttendance.date == date)
             )
         ).run(as_dict=True)
-        today_status = today_attendance[0]["status"] if today_attendance else "No Record"
-        response["status"] = today_status
 
-        # Fetch all attendance records
+        response["status"] = (
+            today_attendance[0]["status"] if today_attendance else "No Record"
+        )
+
+        # All attendance records
         all_attendance = (
             frappe.qb.from_(StudentAttendance)
             .select(StudentAttendance.status)
             .where(
-                (StudentAttendance.student == student.name) &
-                (StudentAttendance.student_group == student_group)
+                (StudentAttendance.student == student.name)
+                & (StudentAttendance.student_group == student_group)
             )
         ).run(as_dict=True)
 
-        # Initialize counts
         present_count = sum(1 for record in all_attendance if record["status"] == "Present")
         absent_count = sum(1 for record in all_attendance if record["status"] == "Absent")
-        leave_count = sum(1 for record in all_attendance if record["status"] == "Leave")
 
-        # Update response with attendance counts
+        #  Count approved leaves from Student Leave Application
+        total_leaves = frappe.db.count(
+            "Student Leave Application",
+            filters={"student": student.name, "mark_as_present": "1"},
+        )
+
+        # Update response
         response.update({
             "present_count": present_count,
             "absent_count": absent_count,
-            "leave_count": leave_count,
+            "leave_count": total_leaves,
         })
 
     except frappe.exceptions.ValidationError as e:
         frappe.log_error(message=str(e), title="Error in get_student_app_data")
         response["error"] = f"Validation Error: {str(e)}"
+
     except Exception as e:
         frappe.log_error(message=frappe.get_traceback(), title="Error in get_student_app_data")
         response["error"] = f"An error occurred: {str(e)}"
-    
-    # print(f"📤 Sending response: {response}")
+
     return response
+
+
+# @frappe.whitelist()
+# def get_student_app_data(studentID):
+#     from frappe.utils import today
+
+#     response = {}
+#     try:
+#         print(f"🔍 Received studentID: {studentID}, type: {type(studentID)}")
+        
+#         # Handle case where studentID might be a stringified object
+#         if isinstance(studentID, str) and studentID.startswith('{'):
+#             import json
+#             try:
+#                 student_data = json.loads(studentID)
+#                 # Extract the actual student ID from the object
+#                 studentID = student_data.get('student') or student_data.get('name')
+#                 print(f"📦 Extracted student ID from object: {studentID}")
+#             except json.JSONDecodeError:
+#                 pass
+        
+#         # If we still don't have a valid student ID, return error
+#         if not studentID:
+#             frappe.throw("Student ID is required")
+        
+#         print(f"🎯 Fetching student with ID: {studentID}")
+
+#         # Fetch the student document
+#         student = frappe.get_doc("Student", studentID)
+
+#         if not student:
+#             frappe.throw(f"Student {studentID} not found")
+
+#         # Get the current program and student group
+#         current_program = get_current_enrollment(student.name)
+#         student_groups = get_student_groups(student.name, current_program.program)
+
+#         if not student_groups:
+#             frappe.throw("Student group not found")
+
+#         student_group = student_groups[0]["label"]
+#         studentDetails = frappe.get_doc("Student Group Student", {
+#             "student": student.name,
+#             "parent": student_group,
+#             "active": 1
+#         })
+
+#         # Fetch profile image as base64
+#         profile = student.image
+#         base64image = None
+#         if profile:
+#             base64image = convert_image_to_base64(profile)
+
+#         # Add basic details to response
+#         response.update({
+#             "base64profile": base64image,
+#             "name": studentDetails.student_name,
+#             "student": student.name,  # Make sure this is included
+#             "student_name": studentDetails.student_name,
+#             "group_roll_no": studentDetails.group_roll_number,
+#             "student_group": student_group,
+#             "mobile": student.student_mobile_number,
+#             "address": student.address_line_1,
+#         })
+
+#         # Split student group into class and section
+#         parts = student_group.split('-')
+#         if len(parts) == 2:
+#             response["class"] = parts[0]
+#             response["section"] = parts[1]
+
+#         # Attendance calculation
+#         date = today()
+#         StudentAttendance = frappe.qb.DocType("Student Attendance")
+
+#         # Fetch today's attendance
+#         today_attendance = (
+#             frappe.qb.from_(StudentAttendance)
+#             .select(StudentAttendance.status)
+#             .where(
+#                 (StudentAttendance.student == student.name) &
+#                 (StudentAttendance.student_group == student_group) &
+#                 (StudentAttendance.date == date)
+#             )
+#         ).run(as_dict=True)
+#         today_status = today_attendance[0]["status"] if today_attendance else "No Record"
+#         response["status"] = today_status
+
+#         # Fetch all attendance records
+#         all_attendance = (
+#             frappe.qb.from_(StudentAttendance)
+#             .select(StudentAttendance.status)
+#             .where(
+#                 (StudentAttendance.student == student.name) &
+#                 (StudentAttendance.student_group == student_group)
+#             )
+#         ).run(as_dict=True)
+
+#         # Initialize counts
+#         present_count = sum(1 for record in all_attendance if record["status"] == "Present")
+#         absent_count = sum(1 for record in all_attendance if record["status"] == "Absent")
+#         leave_count = sum(1 for record in all_attendance if record["status"] == "Leave")
+
+#         # Update response with attendance counts
+#         response.update({
+#             "present_count": present_count,
+#             "absent_count": absent_count,
+#             "leave_count": leave_count,
+#         })
+
+#     except frappe.exceptions.ValidationError as e:
+#         frappe.log_error(message=str(e), title="Error in get_student_app_data")
+#         response["error"] = f"Validation Error: {str(e)}"
+#     except Exception as e:
+#         frappe.log_error(message=frappe.get_traceback(), title="Error in get_student_app_data")
+#         response["error"] = f"An error occurred: {str(e)}"
+    
+#     # print(f"📤 Sending response: {response}")
+#     return response
 
 
 
@@ -1886,20 +2037,14 @@ def get_instructor_app_data(teacherID):
     }
     return response
 
-
 @frappe.whitelist()
 def get_student_attendance_records(based_on, date=None, student_group=None, course_schedule=None):
     if frappe.session.user:
-        # Get student group for the logged-in teacher
-        # if not student_group:
-        #     student_group = get_instructor_group()  # Get the student's group from the teacher's record
         student_list = []
 
-        # THIS CODE IS NOT USED IN APP. Fetch students based on Course Schedule if provided
+        # Fetch students based on Course Schedule or directly by group
         if based_on == "Course Schedule":
-            student_group = frappe.db.get_value(
-                "Course Schedule", course_schedule, "student_group"
-            )
+            student_group = frappe.db.get_value("Course Schedule", course_schedule, "student_group")
             if student_group:
                 student_list = frappe.get_all(
                     "Student Group Student",
@@ -1918,7 +2063,7 @@ def get_student_attendance_records(based_on, date=None, student_group=None, cour
 
         StudentAttendance = frappe.qb.DocType("Student Attendance")
 
-        # THIS CODE IS NOT USED IN APP. Fetch student attendance if course_schedule is provided
+        # Fetch attendance
         if course_schedule:
             student_attendance_list = (
                 frappe.qb.from_(StudentAttendance)
@@ -1938,9 +2083,9 @@ def get_student_attendance_records(based_on, date=None, student_group=None, cour
                     )
                 )
             ).run(as_dict=True)
-        
 
-        #This part adds todays status to the response
+        # Today's attendance
+        from frappe.utils import getdate
         date = getdate()
         today_attendance_list = (
             frappe.qb.from_(StudentAttendance)
@@ -1948,49 +2093,158 @@ def get_student_attendance_records(based_on, date=None, student_group=None, cour
             .where(
                 (StudentAttendance.student_group == student_group)
                 & (StudentAttendance.date == date)
-                )
-            ).run(as_dict=True)
+            )
+        ).run(as_dict=True)
+
+        # Add personal details and today's status
         for student in student_list:
             student_doc = frappe.get_doc("Student", {"name": student.student})
             student.address = student_doc.address_line_1
             student.mobile = student_doc.student_mobile_number
             profile = student_doc.image
-            base64image = convert_image_to_base64(profile) if profile else None
-            student.base64profile = base64image
+            student.base64profile = convert_image_to_base64(profile) if profile else None
             for attendance in today_attendance_list:
                 if student.student == attendance.student:
                     student.status = attendance.status
 
-
-
-        #This part adds present and absent count to the response
+        # Present / Absent / Leave counts
         all_attendance_list = (
             frappe.qb.from_(StudentAttendance)
             .select(StudentAttendance.student, StudentAttendance.status)
-            .where(
-                (StudentAttendance.student_group == student_group)
-            )
+            .where((StudentAttendance.student_group == student_group))
         ).run(as_dict=True)
+
         for student in student_list:
             student.present_count = 0
             student.absent_count = 0
             student.leave_count = 0
+
             for attendance in all_attendance_list:
                 if student.student == attendance.student:
                     if attendance.status == "Present":
                         student.present_count += 1
                     elif attendance.status == "Absent":
                         student.absent_count += 1
-                    else: 
-                        student.leave_count += 1
+                    # else:
+                    #     student.leave_count += 1
 
-        # Add student_group to the response structure
-        # response = {
-        #     "message": student_list  # Add the students below it
-        # }
+            #  Add total approved leaves from Student Leave Application
+            total_leaves = frappe.db.count(
+                "Student Leave Application",
+                filters={"student": student.student, "mark_as_present": "1"}
+            )
+            # print(total_leaves)
+            student.leave_count = total_leaves
+
         return student_list
+
     else:
-        return
+        return []
+
+# @frappe.whitelist()
+# def get_student_attendance_records(based_on, date=None, student_group=None, course_schedule=None):
+#     if frappe.session.user:
+#         # Get student group for the logged-in teacher
+#         # if not student_group:
+#         #     student_group = get_instructor_group()  # Get the student's group from the teacher's record
+#         student_list = []
+
+#         # THIS CODE IS NOT USED IN APP. Fetch students based on Course Schedule if provided
+#         if based_on == "Course Schedule":
+#             student_group = frappe.db.get_value(
+#                 "Course Schedule", course_schedule, "student_group"
+#             )
+#             if student_group:
+#                 student_list = frappe.get_all(
+#                     "Student Group Student",
+#                     fields=["student", "student_name", "group_roll_number"],
+#                     filters={"parent": student_group, "active": 1},
+#                     order_by="group_roll_number",
+#                 )
+
+#         if not student_list:
+#             student_list = frappe.get_all(
+#                 "Student Group Student",
+#                 fields=["student", "student_name", "group_roll_number"],
+#                 filters={"parent": student_group, "active": 1},
+#                 order_by="group_roll_number",
+#             )
+
+#         StudentAttendance = frappe.qb.DocType("Student Attendance")
+
+#         # THIS CODE IS NOT USED IN APP. Fetch student attendance if course_schedule is provided
+#         if course_schedule:
+#             student_attendance_list = (
+#                 frappe.qb.from_(StudentAttendance)
+#                 .select(StudentAttendance.student, StudentAttendance.status)
+#                 .where((StudentAttendance.course_schedule == course_schedule))
+#             ).run(as_dict=True)
+#         else:
+#             student_attendance_list = (
+#                 frappe.qb.from_(StudentAttendance)
+#                 .select(StudentAttendance.student, StudentAttendance.status)
+#                 .where(
+#                     (StudentAttendance.student_group == student_group)
+#                     & (StudentAttendance.date == date)
+#                     & (
+#                         (StudentAttendance.course_schedule == "")
+#                         | (StudentAttendance.course_schedule.isnull())
+#                     )
+#                 )
+#             ).run(as_dict=True)
+        
+
+#         #This part adds todays status to the response
+#         date = getdate()
+#         today_attendance_list = (
+#             frappe.qb.from_(StudentAttendance)
+#             .select(StudentAttendance.student, StudentAttendance.status)
+#             .where(
+#                 (StudentAttendance.student_group == student_group)
+#                 & (StudentAttendance.date == date)
+#                 )
+#             ).run(as_dict=True)
+#         for student in student_list:
+#             student_doc = frappe.get_doc("Student", {"name": student.student})
+#             student.address = student_doc.address_line_1
+#             student.mobile = student_doc.student_mobile_number
+#             profile = student_doc.image
+#             base64image = convert_image_to_base64(profile) if profile else None
+#             student.base64profile = base64image
+#             for attendance in today_attendance_list:
+#                 if student.student == attendance.student:
+#                     student.status = attendance.status
+
+
+
+#         #This part adds present and absent count to the response
+#         all_attendance_list = (
+#             frappe.qb.from_(StudentAttendance)
+#             .select(StudentAttendance.student, StudentAttendance.status)
+#             .where(
+#                 (StudentAttendance.student_group == student_group)
+#             )
+#         ).run(as_dict=True)
+#         for student in student_list:
+#             student.present_count = 0
+#             student.absent_count = 0
+#             student.leave_count = 0
+#             for attendance in all_attendance_list:
+#                 if student.student == attendance.student:
+#                     if attendance.status == "Present":
+#                         student.present_count += 1
+#                     elif attendance.status == "Absent":
+#                         student.absent_count += 1
+#                     else: 
+#                         student.leave_count += 1
+
+#         # Add student_group to the response structure
+#         # response = {
+#         #     "message": student_list  # Add the students below it
+#         # }
+#         return student_list
+#     else:
+#         return
 
 
 @frappe.whitelist()

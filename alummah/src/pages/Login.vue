@@ -83,9 +83,9 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from "vue"
+import { ref, onMounted, onUnmounted, watch } from "vue"
 import { useRouter } from "vue-router"
-import { session, setSelectedLoginRole } from "../data/session" // Import both session and setter
+import { session, setSelectedLoginRole } from "../data/session"
 import '@/styles/form.css';
 import parentImage from "../assets/parent.png"
 import teacherImage from "../assets/teacher.png"
@@ -99,16 +99,10 @@ const username = ref("")
 const password = ref("")
 const passwordVisible = ref(false)
 
-// Get the Frappe role based on selected role
-const getFrappeRole = () => {
-  return currentRole.value === "parent" ? "Guardian" : "Instructor"
-}
-
 // Methods
 function selectRole(role: string) {
   currentRole.value = role
   showWelcome.value = false
-  // Store the selected role globally for navigation
   setSelectedLoginRole(role)
 }
 
@@ -118,19 +112,21 @@ function togglePasswordVisibility() {
 
 function handleLogin() {
   if (!username.value || !password.value) {
-    alert("Please fill out all fields")
+    showUniversalPopup('info', 'Missing Information', 'Please fill out all fields')
     return
   }
   
-  // Make sure the role is stored before submitting
   setSelectedLoginRole(currentRole.value)
   
-  // Use the global session login with role parameter
   session.login.submit({
     email: username.value,
     password: password.value,
     role: getFrappeRole()
   })
+}
+
+function getFrappeRole() {
+  return currentRole.value === "parent" ? "Guardian" : "Instructor"
 }
 
 function navigateTo(routeName: string) {
@@ -147,4 +143,50 @@ function navigateToSignup() {
     query: { role: currentRole.value } 
   })
 }
+
+// UniversalPopup helper function
+function showUniversalPopup(type: string, title: string, message: string) {
+  window.dispatchEvent(new CustomEvent('show-api-message-popup', {
+    detail: {
+      type: type,
+      title: title,
+      message: message
+    }
+  }))
+}
+
+// Watch for login errors
+watch(() => session.login.error, (error) => {
+  if (error) {
+    if (error.message && (error.message.includes('CSRF') || error.message.includes('session'))) {
+      showUniversalPopup('csrf', 'Session Conflict', 'It seems you\'re already logged in. Please logout from other sessions to continue.')
+    } else {
+      const message = error.message || "Login failed. Please check your credentials and try again."
+      showUniversalPopup('info', 'Login Failed', message)
+    }
+  }
+})
+
+// Watch for login success with error message (when status is not success)
+watch(() => session.login.data, (data) => {
+  if (data && !data.status === "success") {
+    const message = data.message || "Login failed. Please try again."
+    showUniversalPopup('info', 'Login Information', message)
+  }
+})
+
+// Reset form when component mounts
+const resetForm = () => {
+  username.value = ""
+  password.value = ""
+  session.login.reset()
+}
+
+onMounted(() => {
+  resetForm()
+})
+
+onUnmounted(() => {
+  resetForm()
+})
 </script>
