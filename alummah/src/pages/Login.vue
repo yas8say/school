@@ -102,18 +102,19 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <Input
+                <input
                   required
                   id="username"
                   type="text"
                   placeholder="johndoe@email.com"
-                  class="pl-10 w-full pr-3"
+                  class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
                   :class="{ 
                     'border-red-300 focus:border-red-500 focus:ring-red-200': loginError,
                     'border-gray-300 focus:border-blue-500 focus:ring-blue-200': !loginError
                   }"
                   autocomplete="username"
                   v-model="username"
+                  @input="clearError"
                 />
               </div>
             </div>
@@ -139,18 +140,19 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
-                <Input
+                <input
                   required
                   id="password"
                   :type="passwordVisible ? 'text' : 'password'"
                   placeholder="••••••"
-                  class="pl-10 w-full pr-10"
+                  class="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
                   :class="{ 
                     'border-red-300 focus:border-red-500 focus:ring-red-200': loginError,
                     'border-gray-300 focus:border-blue-500 focus:ring-blue-200': !loginError
                   }"
                   autocomplete="current-password"
                   v-model="password"
+                  @input="clearError"
                 />
                 <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
                   <button
@@ -167,21 +169,36 @@
               </div>
             </div>
 
-            <!-- Login Button -->
-            <Button 
-              :loading="session.login.loading" 
-              variant="solid"
-              class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 transition-colors"
-              :disabled="!username || !password || session.login.loading"
-            >
-              <template #prefix>
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            <!-- Error Message -->
+            <div v-if="loginError" class="bg-red-50 border border-red-200 rounded-md p-4 transition-all duration-300">
+              <div class="flex items-start">
+                <svg class="w-5 h-5 text-red-400 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-              </template>
+                <div class="flex-1">
+                  <h3 class="text-red-800 font-medium text-sm mb-1">Login Failed</h3>
+                  <p class="text-red-700 text-sm">{{ loginError }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Login Button -->
+            <button 
+              type="submit"
+              :disabled="session.login.loading"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 font-medium"
+              :class="{
+                'opacity-50 cursor-not-allowed': (!username || !password) && !session.login.loading,
+                'bg-blue-600 hover:bg-blue-700': username && password && !session.login.loading,
+                'bg-blue-400 cursor-wait': session.login.loading
+              }"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" v-if="!session.login.loading">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
               <span v-if="session.login.loading">Signing In...</span>
               <span v-else>Sign in as {{ currentRole }}</span>
-            </Button>
+            </button>
 
             <!-- Back and Forgot Password -->
             <div class="flex items-center justify-between pt-2">
@@ -203,33 +220,27 @@
 
             <!-- Alternative Login Options -->
             <div class="border-t pt-4 space-y-3">
-              <Button 
+              <button 
                 type="button" 
-                variant="outline"
-                class="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
                 @click="navigateTo('OTPLogin')"
+                class="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 font-medium"
               >
-                <template #prefix>
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </template>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
                 Login with OTP
-              </Button>
+              </button>
 
-              <Button 
+              <button 
                 type="button" 
-                variant="outline"
-                class="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
                 @click="navigateTo('SignInScreen')"
+                class="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 font-medium"
               >
-                <template #prefix>
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                </template>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
                 Login with Google
-              </Button>
+              </button>
             </div>
 
             <!-- Sign Up Section -->
@@ -288,19 +299,58 @@ function togglePasswordVisibility() {
   passwordVisible.value = !passwordVisible.value
 }
 
-function handleLogin() {
+function clearError() {
+  loginError.value = ""
+}
+
+async function handleLogin() {
+  // Use the reactive values directly
+  console.log('Login attempt values:', { 
+    username: username.value, 
+    password: password.value,
+    usernameLength: username.value?.length,
+    passwordLength: password.value?.length
+  })
+  
   if (!username.value || !password.value) {
-    showUniversalPopup('info', 'Missing Information', 'Please fill out all fields')
+    loginError.value = 'Please fill out all fields'
+    console.log('Validation failed - empty fields')
     return
   }
   
+  // Clear any previous errors
+  loginError.value = ""
+  console.log('Proceeding with login...')
+  
   setSelectedLoginRole(currentRole.value)
   
-  session.login.submit({
-    email: username.value,
-    password: password.value,
-    role: getFrappeRole()
-  })
+  try {
+    console.log('Submitting login with:', {
+      email: username.value,
+      password: '***', // Don't log actual password
+      role: getFrappeRole()
+    })
+    
+    await session.login.submit({
+      email: username.value,
+      password: password.value,
+      role: getFrappeRole()
+    })
+    
+    console.log('Login successful!')
+    
+  } catch (error) {
+    console.error('Login error details:', error)
+    
+    // Handle specific error types
+    if (error.message && error.message.includes('AuthenticationError')) {
+      loginError.value = 'Invalid username or password. Please check your credentials and try again.'
+    } else if (error.message && error.message.includes('CSRF') || error.message.includes('session')) {
+      loginError.value = 'Session error. Please try refreshing the page.'
+    } else {
+      loginError.value = 'Login failed. Please check your credentials and try again.'
+    }
+  }
 }
 
 function getFrappeRole() {
@@ -322,34 +372,17 @@ function navigateToSignup() {
   })
 }
 
-// UniversalPopup helper function
-function showUniversalPopup(type: string, title: string, message: string) {
-  window.dispatchEvent(new CustomEvent('show-api-message-popup', {
-    detail: {
-      type: type,
-      title: title,
-      message: message
-    }
-  }))
-}
-
-// Watch for login errors
+// Watch for login errors (backup error handling)
 watch(() => session.login.error, (error) => {
-  if (error) {
-    if (error.message && (error.message.includes('CSRF') || error.message.includes('session'))) {
-      showUniversalPopup('csrf', 'Session Conflict', 'It seems you\'re already logged in. Please logout from other sessions to continue.')
+  if (error && !loginError.value) {
+    console.error('Session login error:', error)
+    if (error.message && error.message.includes('AuthenticationError')) {
+      loginError.value = 'Invalid username or password. Please check your credentials and try again.'
+    } else if (error.message && (error.message.includes('CSRF') || error.message.includes('session'))) {
+      loginError.value = 'Session error. Please try refreshing the page.'
     } else {
-      const message = error.message || "Login failed. Please check your credentials and try again."
-      showUniversalPopup('info', 'Login Failed', message)
+      loginError.value = error.message || "Login failed. Please check your credentials and try again."
     }
-  }
-})
-
-// Watch for login success with error message (when status is not success)
-watch(() => session.login.data, (data) => {
-  if (data && !data.status === "success") {
-    const message = data.message || "Login failed. Please try again."
-    showUniversalPopup('info', 'Login Information', message)
   }
 })
 
@@ -357,6 +390,7 @@ watch(() => session.login.data, (data) => {
 const resetForm = () => {
   username.value = ""
   password.value = ""
+  loginError.value = ""
   session.login.reset()
 }
 
@@ -368,37 +402,3 @@ onUnmounted(() => {
   resetForm()
 })
 </script>
-
-<style scoped>
-/* Custom focus styles */
-:deep(input:focus) {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-:deep(input.border-red-300:focus) {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
-
-/* Smooth transitions for error states */
-:deep(input) {
-  transition: all 0.2s ease-in-out;
-}
-
-/* Ensure consistent input heights */
-:deep(.input-container) {
-  min-height: 42px;
-}
-
-/* Button loading state */
-:deep(.btn--loading) {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-/* Ensure consistent input widths */
-:deep(.input) {
-  width: 100%;
-  box-sizing: border-box;
-}
-</style>
