@@ -1,4 +1,4 @@
-// router.js (simplified version)
+// router.js
 import { createRouter, createWebHistory } from 'vue-router'
 import { session } from './data/session'
 import { userResource } from '@/data/user'
@@ -62,20 +62,62 @@ const router = createRouter({
   routes,
 })
 
+// Helper function to check admin access
+async function checkAdminAccess() {
+  // Wait for user resource to load if it's still loading
+  if (userResource.loading) {
+    await userResource.promise
+  }
+  
+  // Multiple checks for Administrator role
+  const isAdmin = 
+    session.isAdmin ||
+    session.hasRole('Administrator') ||
+    (userResource.data?.roles?.includes('Administrator') ?? false)
+  
+  console.log('Router admin check:', {
+    sessionIsAdmin: session.isAdmin,
+    sessionUserRole: session.userRole,
+    userResourceRoles: userResource.data?.roles,
+    finalResult: isAdmin
+  })
+  
+  return isAdmin
+}
+
 router.beforeEach(async (to, from, next) => {
   const isLoggedIn = session.isLoggedIn
-  const isAdmin = session.isAdmin
+  const requiresAuth = to.meta.requiresAuth
+  const requiresAdmin = to.meta.requiresAdmin
   
+  console.log('Navigation guard:', {
+    to: to.name,
+    requiresAuth,
+    requiresAdmin,
+    isLoggedIn,
+    user: session.user
+  })
+
   try {
-    await userResource.promise
+    // Ensure user resource is loaded
+    if (isLoggedIn && !userResource.data) {
+      await userResource.reload()
+    }
   } catch (error) {
-    // User resource failed to load
+    console.error('Failed to load user resource:', error)
   }
 
-  // Public routes
-  if (!to.meta.requiresAuth) {
-    if (to.name === 'Login' && isLoggedIn && isAdmin) {
-      next({ name: 'Home' })
+  // Public routes (no auth required)
+  if (!requiresAuth) {
+    if (to.name === 'Login' && isLoggedIn) {
+      // Check if logged-in user is admin and redirect accordingly
+      const isAdmin = await checkAdminAccess()
+      if (isAdmin) {
+        next({ name: 'Home' })
+      } else {
+        // Non-admin users stay on login page with message
+        next()
+      }
     } else {
       next()
     }
@@ -84,18 +126,35 @@ router.beforeEach(async (to, from, next) => {
 
   // Check authentication
   if (!isLoggedIn) {
+    console.log('User not logged in, redirecting to login')
     next({ name: 'Login' })
     return
   }
 
-  // Check admin privileges
-  if (to.meta.requiresAdmin && !isAdmin) {
-    // Show alert and prevent navigation
-    alert('Access Denied: Administrator privileges required.')
-    next(false)
-    return
+  // Check admin privileges for admin-only routes
+  if (requiresAdmin) {
+    const isAdmin = await checkAdminAccess()
+    
+    if (!isAdmin) {
+      console.warn('Access denied: User does not have Administrator privileges')
+      
+      // Show user-friendly error message
+      const event = new CustomEvent('show-api-message-popup', {
+        detail: {
+          type: 'error',
+          title: 'Access Denied',
+          message: 'Administrator privileges are required to access this page. Please contact your system administrator if you need access.'
+        }
+      })
+      window.dispatchEvent(event)
+      
+      // Prevent navigation
+      next(false)
+      return
+    }
   }
 
+  // All checks passed, allow navigation
   next()
 })
 
