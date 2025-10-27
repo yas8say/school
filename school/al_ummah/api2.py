@@ -72,6 +72,55 @@ def login(usr, pwd, role=None):
     except Exception as e:
         frappe.throw(f"Unexpected error: {str(e)}", frappe.ValidationError)
 
+@frappe.whitelist(allow_guest=True)
+def admin_login(usr, pwd):
+    """
+    Custom login API with role validation for Admin portal
+    """
+    print("=== Admin Login API called ===")
+    print(f"Received username: {usr}")
+
+    try:
+        # Authenticate using LoginManager
+        login_manager = LoginManager()
+        login_manager.authenticate(user=usr, pwd=pwd)
+        
+        # Get user roles
+        user_roles = frappe.get_roles(usr)
+        print("User roles:", user_roles)
+
+        # Check if user has Administrator role
+        if "Administrator" not in user_roles:
+            frappe.throw(
+                f"Access denied. Administrator role required. Your roles: {', '.join(user_roles)}",
+                frappe.PermissionError
+            )
+
+        # Create session
+        login_manager.post_login()
+
+        print("✅ Admin login successful:", frappe.session.user)
+        
+        # Return user data including roles
+        return {
+            "status": "success",
+            "user": usr,
+            "roles": user_roles,
+            "sid": frappe.session.sid,
+            "message": "Admin login successful",
+            "default_route": "/quick-setup"
+        }
+
+    except frappe.AuthenticationError:
+        frappe.throw("Invalid username or password", frappe.AuthenticationError)
+
+    except frappe.PermissionError as e:
+        frappe.throw(str(e), frappe.PermissionError)
+
+    except Exception as e:
+        print(f"Unexpected error in admin_login: {str(e)}")
+        frappe.throw("Login failed. Please try again.", frappe.ValidationError)
+
 import frappe
 from frappe import _
 
