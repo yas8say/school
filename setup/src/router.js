@@ -4,12 +4,18 @@ import { session } from './data/session'
 import { userResource } from '@/data/user'
 
 const routes = [
-  // Root path (/setup) redirects to login
   {
     path: '/',
     name: 'Root',
-    redirect: '/account/login'
+    redirect: { name: 'Login' }
   },
+  {
+    name: 'Login',
+    path: '/account/login',
+    component: () => import('@/pages/Login.vue'),
+    meta: { requiresAuth: false }
+  },
+  // Home dashboard with nested routes
   {
     path: '/home',
     name: 'Home',
@@ -55,13 +61,7 @@ const routes = [
       },
     ]
   },
-  {
-    name: 'Login',
-    path: '/account/login',
-    component: () => import('@/pages/Login.vue'),
-    meta: { requiresAuth: false }
-  },
-  // Catch-all route - redirect any unknown paths to login
+  // Catch-all route
   {
     path: '/:pathMatch(.*)*',
     redirect: '/account/login'
@@ -73,30 +73,53 @@ const router = createRouter({
   routes,
 })
 
-// Helper function to check admin access
-async function checkAdminAccess() {
-  // Wait for user resource to load if it's still loading
-  if (userResource.loading) {
-    await userResource.promise
+// Helper function to show universal popup
+function showUniversalPopup(type, title, message) {
+  const event = new CustomEvent('show-universal-popup', {
+    detail: { type, title, message }
+  })
+  window.dispatchEvent(event)
+}
+
+// Check if logout was recently clicked (within last 5 seconds)
+function wasLogoutRecentlyClicked() {
+  const logoutTimestamp = localStorage.getItem('logout_clicked_timestamp')
+  if (!logoutTimestamp) return false
+  
+  const now = Date.now()
+  const timeDiff = now - parseInt(logoutTimestamp)
+  return timeDiff < 5000 // 5 seconds
+}
+
+// Clear old logout timestamp (only if it's expired)
+function clearExpiredLogoutTimestamp() {
+  const logoutTimestamp = localStorage.getItem('logout_clicked_timestamp')
+  if (!logoutTimestamp) return
+  
+  const now = Date.now()
+  const timeDiff = now - parseInt(logoutTimestamp)
+  
+  // Only clear if it's older than 5 seconds
+  if (timeDiff > 5000) {
+    localStorage.removeItem('logout_clicked_timestamp')
+  }
+}
+
+// Show error via UniversalPopup (with logout timestamp check)
+function showError(type, title, message) {
+  // Don't show role error popup if logout was recently clicked
+  if (type === 'role' && wasLogoutRecentlyClicked()) {
+    console.log('Suppressing role error popup - logout was recently clicked')
+    return
   }
   
-  // Multiple checks for Administrator role
-  const isAdmin = 
-    session.isAdmin ||
-    session.hasRole('Administrator') ||
-    (userResource.data?.roles?.includes('Administrator') ?? false)
-  
-  console.log('Router admin check:', {
-    sessionIsAdmin: session.isAdmin,
-    sessionUserRole: session.userRole,
-    userResourceRoles: userResource.data?.roles,
-    finalResult: isAdmin
-  })
-  
-  return isAdmin
+  showUniversalPopup(type, title, message)
 }
 
 router.beforeEach(async (to, from, next) => {
+  // Clear expired logout timestamp on every navigation
+  clearExpiredLogoutTimestamp()
+  
   const isLoggedIn = session.isLoggedIn
   const requiresAuth = to.meta.requiresAuth
   const requiresAdmin = to.meta.requiresAdmin
@@ -108,11 +131,15 @@ router.beforeEach(async (to, from, next) => {
     requiresAuth,
     requiresAdmin,
     isLoggedIn,
-    user: session.user
+    sessionUser: session.user,
+    sessionUserRole: session.userRole,
+    sessionIsAdmin: session.isAdmin,
+    sessionIsAdministrator: session.isAdministrator(),
+    wasLogoutRecentlyClicked: wasLogoutRecentlyClicked()
   })
 
   try {
-    // Ensure user resource is loaded
+    // Ensure user resource is loaded if user is logged in
     if (isLoggedIn && !userResource.data) {
       await userResource.reload()
     }
@@ -123,12 +150,28 @@ router.beforeEach(async (to, from, next) => {
   // Public routes (no auth required)
   if (!requiresAuth) {
     if (to.name === 'Login' && isLoggedIn) {
-      // Check if logged-in user is admin and redirect accordingly
-      const isAdmin = await checkAdminAccess()
+      // Check if logged-in user is admin using session.isAdministrator()
+      const isAdmin = session.isAdministrator()
+      console.log('Login page access - User logged in:', {
+        isLoggedIn,
+        isAdmin,
+        sessionUserRole: session.userRole,
+        wasLogoutRecentlyClicked: wasLogoutRecentlyClicked()
+      })
+      
       if (isAdmin) {
+        // Redirect admin users to home dashboard
+        console.log('Redirecting admin user to Home')
         next({ name: 'Home' })
       } else {
         // Non-admin users stay on login page with message
+        console.log('Non-admin user staying on login page')
+        // Use showError instead of showUniversalPopup to respect the 5-second rule
+        showError(
+          'role',
+          'Access Information',
+          'You are logged in but do not have Administrator privileges. This portal is for administrators only.'
+        )
         next()
       }
     } else {
@@ -146,28 +189,26 @@ router.beforeEach(async (to, from, next) => {
 
   // Check admin privileges for admin-only routes
   if (requiresAdmin) {
-    const isAdmin = await checkAdminAccess()
+    const isAdmin = session.isAdministrator()
     
     if (!isAdmin) {
       console.warn('Access denied: User does not have Administrator privileges')
       
-      // Show user-friendly error message
-      const event = new CustomEvent('show-api-message-popup', {
-        detail: {
-          type: 'error',
-          title: 'Access Denied',
-          message: 'Administrator privileges are required to access this page. Please contact your system administrator if you need access.'
-        }
-      })
-      window.dispatchEvent(event)
+      // Use showError instead of showUniversalPopup to respect the 5-second rule
+      showError(
+        'role',
+        'Access Denied',
+        'Administrator privileges are required to access this portal. Please logout and contact your system administrator.'
+      )
       
-      // Prevent navigation
+      // Prevent navigation - let the user decide to logout via popup
       next(false)
       return
     }
   }
 
   // All checks passed, allow navigation
+  console.log('Navigation allowed to:', to.name)
   next()
 })
 
