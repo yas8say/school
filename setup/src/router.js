@@ -4,11 +4,17 @@ import { session } from './data/session'
 import { userResource } from '@/data/user'
 
 const routes = [
+  // Root path (/setup) redirects to login
   {
     path: '/',
+    name: 'Root',
+    redirect: '/account/login'
+  },
+  {
+    path: '/home',
     name: 'Home',
     component: () => import('@/pages/Home.vue'),
-    redirect: '/quick-setup',
+    redirect: '/home/quick-setup',
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       {
@@ -55,6 +61,11 @@ const routes = [
     component: () => import('@/pages/Login.vue'),
     meta: { requiresAuth: false }
   },
+  // Catch-all route - redirect any unknown paths to login
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/account/login'
+  }
 ]
 
 const router = createRouter({
@@ -92,6 +103,8 @@ router.beforeEach(async (to, from, next) => {
   
   console.log('Navigation guard:', {
     to: to.name,
+    path: to.path,
+    fullPath: to.fullPath,
     requiresAuth,
     requiresAdmin,
     isLoggedIn,
