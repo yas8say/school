@@ -15,7 +15,7 @@ const routes = [
     component: () => import('@/pages/Login.vue'),
     meta: { requiresAuth: false }
   },
-  // Home dashboard with nested routes
+  // Home dashboard with nested routes - ADMIN ONLY
   {
     path: '/home',
     name: 'Home',
@@ -116,6 +116,34 @@ function showError(type, title, message) {
   showUniversalPopup(type, title, message)
 }
 
+// Check if user has Administrator role
+function hasAdministratorRole() {
+  // Use session's isAdministrator method
+  return session.isAdministrator()
+}
+
+// Check if user has valid role for this application (Administrator only)
+function hasValidRole() {
+  return hasAdministratorRole()
+}
+
+// Handle successful authentication redirection for Admin
+function handleAuthSuccessRedirect() {
+  if (hasAdministratorRole()) {
+    return { name: 'Home' }
+  } else {
+    // No admin role - but don't show popup if logout was recent
+    if (!wasLogoutRecentlyClicked()) {
+      showError(
+        'role', 
+        'Access Restricted', 
+        'Your account does not have Administrator privileges required to access this portal.'
+      )
+    }
+    return { name: 'Login' }
+  }
+}
+
 router.beforeEach(async (to, from, next) => {
   // Clear expired logout timestamp on every navigation
   clearExpiredLogoutTimestamp()
@@ -131,10 +159,7 @@ router.beforeEach(async (to, from, next) => {
     requiresAuth,
     requiresAdmin,
     isLoggedIn,
-    sessionUser: session.user,
-    sessionUserRole: session.userRole,
-    sessionIsAdmin: session.isAdmin,
-    sessionIsAdministrator: session.isAdministrator(),
+    hasAdministratorRole: hasAdministratorRole(),
     wasLogoutRecentlyClicked: wasLogoutRecentlyClicked()
   })
 
@@ -150,12 +175,11 @@ router.beforeEach(async (to, from, next) => {
   // Public routes (no auth required)
   if (!requiresAuth) {
     if (to.name === 'Login' && isLoggedIn) {
-      // Check if logged-in user is admin using session.isAdministrator()
-      const isAdmin = session.isAdministrator()
+      // Check if logged-in user is admin
+      const isAdmin = hasAdministratorRole()
       console.log('Login page access - User logged in:', {
         isLoggedIn,
         isAdmin,
-        sessionUserRole: session.userRole,
         wasLogoutRecentlyClicked: wasLogoutRecentlyClicked()
       })
       
@@ -166,7 +190,6 @@ router.beforeEach(async (to, from, next) => {
       } else {
         // Non-admin users stay on login page with message
         console.log('Non-admin user staying on login page')
-        // Use showError instead of showUniversalPopup to respect the 5-second rule
         showError(
           'role',
           'Access Information',
@@ -189,12 +212,11 @@ router.beforeEach(async (to, from, next) => {
 
   // Check admin privileges for admin-only routes
   if (requiresAdmin) {
-    const isAdmin = session.isAdministrator()
+    const isAdmin = hasAdministratorRole()
     
     if (!isAdmin) {
       console.warn('Access denied: User does not have Administrator privileges')
       
-      // Use showError instead of showUniversalPopup to respect the 5-second rule
       showError(
         'role',
         'Access Denied',
