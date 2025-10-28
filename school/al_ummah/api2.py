@@ -707,48 +707,70 @@ def get_student_guardian_names(student):
     
     return guardian_list
 
-
-
-import base64
-import frappe
-from frappe.utils.file_manager import save_file
 @frappe.whitelist()
 def update_student_profile_image(student_id, base64_image):
+    """Efficiently update a student's profile image (base64 → File Doctype)."""
+    import base64
+
     try:
+        # Validate inputs
+        if not student_id or not base64_image:
+            return {"status": "error", "message": "Student ID and image data are required."}
+
+        if not frappe.db.exists("Student", student_id):
+            return {"status": "error", "message": f"Student {student_id} not found."}
+
         # Extract base64 data
-        if base64_image.startswith('data:'):
-            base64_data = base64_image.split(',', 1)[1]
-        else:
-            base64_data = base64_image
-
-        # Decode image
+        base64_data = base64_image.split(",", 1)[1] if base64_image.startswith("data:") else base64_image
         image_data = base64.b64decode(base64_data)
-        
-        # Save file
-        saved_file = save_file(
-            fname=f"{student_id}_profile.jpg",
-            content=image_data,
-            dt="Student",
-            dn=student_id,
-            is_private=0
-        )
 
-        # Update student image directly in database
-        frappe.db.set_value("Student", student_id, "image", saved_file.file_url)
+        # Size limits (1KB–5MB)
+        if len(image_data) < 1024:
+            return {"status": "error", "message": "Image data too small."}
+        if len(image_data) > 5 * 1024 * 1024:
+            return {"status": "error", "message": "Image too large (max 5MB)."}
+
+        # Remove old public files for the student
+        old_files = frappe.get_all(
+            "File",
+            filters={
+                "attached_to_doctype": "Student",
+                "attached_to_name": student_id,
+                "is_private": 0,
+            },
+            pluck="name",
+        )
+        for file_name in old_files:
+            frappe.delete_doc("File", file_name, ignore_permissions=True)
+
+        # Create and insert new file
+        file_doc = frappe.get_doc({
+            "doctype": "File",
+            "file_name": f"{student_id}_profile.jpg",
+            "content": image_data,
+            "attached_to_doctype": "Student",
+            "attached_to_name": student_id,
+            "is_private": 0
+        })
+        file_doc.insert(ignore_permissions=True)
+
+        # Update Student record with new image URL
+        frappe.db.set_value("Student", student_id, "image", file_doc.file_url)
         frappe.db.commit()
 
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Profile image updated successfully.",
-            "image_url": saved_file.file_url
+            "image_url": file_doc.file_url
         }
 
     except Exception as e:
         frappe.db.rollback()
-        return {"status": "error", "message": f"An error occurred: {str(e)}"}
+        frappe.log_error(message=frappe.get_traceback(), title="Update Student Profile Image Error")
+        return {"status": "error", "message": f"Failed to update image: {str(e)}"}
 
 
-
+        
 # @frappe.whitelist()
 # def update_student_profile_image(student_id, base64_image):
 #     try:
@@ -2086,214 +2108,370 @@ def get_instructor_app_data(teacherID):
     }
     return response
 
+import frappe
+import base64
+import requests
+from io import BytesIO
+from PIL import Image
+
+# def convert_image_to_base64_with_compression(image_url, max_size=(300, 300), quality=70):
+#     """
+#     Fetch an image from a given URL, compress it, and return Base64 string.
+
+#     Args:
+#         image_url (str): URL of the image (e.g. /files/student.jpg)
+#         max_size (tuple): Resize dimensions (width, height)
+#         quality (int): Compression quality for JPEG/WebP
+#     Returns:
+#         str: Base64 encoded compressed image (with data URI prefix)
+#     """
+#     if not image_url:
+#         return None
+
+#     # Replace https with http and append :8000 for local sites
+#     base_url = frappe.utils.get_url().replace("https://", "http://")
+
+#     if not image_url.startswith("http"):
+#         image_url = base_url + image_url
+
+#     try:
+#         response = requests.get(image_url, timeout=5)
+#         if response.status_code != 200:
+#             return None
+
+#         # Open the image from bytes
+#         image_bytes = BytesIO(response.content)
+#         with Image.open(image_bytes) as img:
+#             # Convert RGBA → RGB to avoid transparency issues
+#             if img.mode in ("RGBA", "P"):
+#                 img = img.convert("RGB")
+
+#             # Resize (maintaining aspect ratio)
+#             img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+#             # Compress and save to buffer
+#             buffer = BytesIO()
+#             img.save(buffer, format="JPEG", optimize=True, quality=quality)
+#             buffer.seek(0)
+
+#             # Convert to Base64
+#             encoded = base64.b64encode(buffer.read()).decode("utf-8")
+
+#             # Return browser-ready Base64 image
+#             return f"data:image/jpeg;base64,{encoded}"
+
+#     except Exception as e:
+#         frappe.log_error(f"Image compression failed: {str(e)}", "convert_image_to_base64")
+#         return None
+
 @frappe.whitelist()
-def get_student_attendance_records(based_on, date=None, student_group=None, course_schedule=None):
-    if frappe.session.user:
-        student_list = []
+def get_student_attendance_records(based_on, date=None, student_group=None, calculate_count_data=False, course_schedule=None):
+    """Main entrypoint — delegates to appropriate function based on flag."""
+    if not frappe.session.user:
+        return []
 
-        # Fetch students based on Course Schedule or directly by group
-        if based_on == "Course Schedule":
-            student_group = frappe.db.get_value("Course Schedule", course_schedule, "student_group")
-            if student_group:
-                student_list = frappe.get_all(
-                    "Student Group Student",
-                    fields=["student", "student_name", "group_roll_number"],
-                    filters={"parent": student_group, "active": 1},
-                    order_by="group_roll_number",
-                )
+    # Fetch student group based on course schedule if needed
+    if based_on == "Course Schedule":
+        student_group = frappe.db.get_value("Course Schedule", course_schedule, "student_group")
 
-        if not student_list:
-            student_list = frappe.get_all(
-                "Student Group Student",
-                fields=["student", "student_name", "group_roll_number"],
-                filters={"parent": student_group, "active": 1},
-                order_by="group_roll_number",
-            )
+    if calculate_count_data:
+        return get_detailed_student_data(student_group, date, course_schedule)
+    else:
+        data = get_basic_student_data(student_group)
+        # print(data)
+        return data
 
-        StudentAttendance = frappe.qb.DocType("Student Attendance")
 
-        # Fetch attendance
-        if course_schedule:
-            student_attendance_list = (
-                frappe.qb.from_(StudentAttendance)
-                .select(StudentAttendance.student, StudentAttendance.status)
-                .where((StudentAttendance.course_schedule == course_schedule))
-            ).run(as_dict=True)
-        else:
-            student_attendance_list = (
-                frappe.qb.from_(StudentAttendance)
-                .select(StudentAttendance.student, StudentAttendance.status)
-                .where(
-                    (StudentAttendance.student_group == student_group)
-                    & (StudentAttendance.date == date)
-                    & (
-                        (StudentAttendance.course_schedule == "")
-                        | (StudentAttendance.course_schedule.isnull())
-                    )
-                )
-            ).run(as_dict=True)
+# ---------------------- BASIC STUDENT DATA ---------------------- #
+import frappe
+from datetime import date
+from frappe.utils import getdate
+from frappe.query_builder import DocType
 
-        # Today's attendance
-        from frappe.utils import getdate
-        date = getdate()
-        today_attendance_list = (
+@frappe.whitelist()
+def get_basic_student_data(student_group):
+    """Return minimal info — ID, name, roll no, image URL, and attendance status flags."""
+    
+    # from datetime import date
+    # from frappe.query_builder import DocType
+
+    StudentGroupStudent = DocType("Student Group Student")
+    Student = DocType("Student")
+
+    # Step 1: Join Student and Student Group Student to get required fields in one query
+    student_list = (
+        frappe.qb.from_(StudentGroupStudent)
+        .inner_join(Student)
+        .on(StudentGroupStudent.student == Student.name)
+        .select(
+            StudentGroupStudent.student,
+            StudentGroupStudent.student_name,
+            StudentGroupStudent.group_roll_number,
+            Student.image.as_("img_url"),  # directly include image from Student doctype
+        )
+        .where(
+            (StudentGroupStudent.parent == student_group)
+            & (StudentGroupStudent.active == 1)
+        )
+        .orderby(StudentGroupStudent.group_roll_number)
+    ).run(as_dict=True)
+
+    # Step 2: Attendance lookup
+    student_ids = [s["student"] for s in student_list]
+    today = date.today()
+
+    attendance_records = frappe.get_all(
+        "Student Attendance",
+        filters={"student": ["in", student_ids], "date": today},
+        fields=["student", "status"],
+    )
+
+    # Step 3: Separate present and on-leave students
+    present_stud = {rec.student for rec in attendance_records if rec.status and rec.status.lower() == "present"}
+    on_leave_stud = {rec.student for rec in attendance_records if rec.status and rec.status.lower() in ["leave", "on leave"]}
+
+    # Step 4: Attach flags (no need to query Student again)
+    for student in student_list:
+        # student["img_url"] = student.pop("image", None)
+        student["present"] = 1 if student["student"] in present_stud else 0
+        student["on_leave"] = 1 if student["student"] in on_leave_stud else 0
+
+    return student_list
+
+
+import frappe
+from frappe.utils import getdate
+
+@frappe.whitelist()
+def get_detailed_student_data(student_group, date=None, course_schedule=None):
+    """Return full data — includes personal info, today's attendance, and summary counts."""
+
+    StudentGroupStudent = DocType("Student Group Student")
+    Student = DocType("Student")
+    StudentAttendance = DocType("Student Attendance")
+
+    date = getdate()
+
+    # ✅ Step 1: JOIN Student Group Student with Student to get all info in one query
+    student_list = (
+        frappe.qb.from_(StudentGroupStudent)
+        .join(Student)
+        .on(StudentGroupStudent.student == Student.name)
+        .select(
+            StudentGroupStudent.student,
+            StudentGroupStudent.student_name,
+            StudentGroupStudent.group_roll_number,
+            Student.image.as_("img_url"),
+            Student.address_line_1.as_("address"),
+            Student.student_mobile_number.as_("mobile"),
+        )
+        .where(
+            (StudentGroupStudent.parent == student_group)
+            & (StudentGroupStudent.active == 1)
+        )
+        .orderby(StudentGroupStudent.group_roll_number)
+    ).run(as_dict=True)
+    
+    if not student_list:
+        return []
+
+    student_ids = [s.student for s in student_list]
+
+    # ✅ Step 2: Fetch attendance based on course_schedule or date
+    if course_schedule:
+        student_attendance_list = (
+            frappe.qb.from_(StudentAttendance)
+            .select(StudentAttendance.student, StudentAttendance.status)
+            .where(StudentAttendance.course_schedule == course_schedule)
+        ).run(as_dict=True)
+    else:
+        student_attendance_list = (
             frappe.qb.from_(StudentAttendance)
             .select(StudentAttendance.student, StudentAttendance.status)
             .where(
                 (StudentAttendance.student_group == student_group)
                 & (StudentAttendance.date == date)
+                & ((StudentAttendance.course_schedule == "") | (StudentAttendance.course_schedule.isnull()))
             )
         ).run(as_dict=True)
 
-        # Add personal details and today's status
-        for student in student_list:
-            student_doc = frappe.get_doc("Student", {"name": student.student})
-            student.address = student_doc.address_line_1
-            student.mobile = student_doc.student_mobile_number
-            profile = student_doc.image
-            student.base64profile = convert_image_to_base64(profile) if profile else None
-            for attendance in today_attendance_list:
-                if student.student == attendance.student:
-                    student.status = attendance.status
+    # ✅ Step 3: Today's attendance
+    today_attendance_list = (
+        frappe.qb.from_(StudentAttendance)
+        .select(StudentAttendance.student, StudentAttendance.status)
+        .where(
+            (StudentAttendance.student_group == student_group)
+            & (StudentAttendance.date == date)
+        )
+    ).run(as_dict=True)
 
-        # Present / Absent / Leave counts
-        all_attendance_list = (
-            frappe.qb.from_(StudentAttendance)
-            .select(StudentAttendance.student, StudentAttendance.status)
-            .where((StudentAttendance.student_group == student_group))
-        ).run(as_dict=True)
+    # ✅ Step 4: All attendance (for summary)
+    all_attendance_list = (
+        frappe.qb.from_(StudentAttendance)
+        .select(StudentAttendance.student, StudentAttendance.status)
+        .where(StudentAttendance.student_group == student_group)
+    ).run(as_dict=True)
 
-        for student in student_list:
-            student.present_count = 0
-            student.absent_count = 0
-            student.leave_count = 0
+    # ✅ Step 5: Enrich each record
+    for s in student_list:
+        s.status = next((a.status for a in today_attendance_list if a.student == s.student), None)
+        s.present_count = sum(1 for a in all_attendance_list if a.student == s.student and a.status == "Present")
+        s.absent_count = sum(1 for a in all_attendance_list if a.student == s.student and a.status == "Absent")
+        s.leave_count = sum(1 for a in all_attendance_list if a.student == s.student and a.status not in ("Present", "Absent"))
+    # print(student_list)
+    return student_list
 
-            for attendance in all_attendance_list:
-                if student.student == attendance.student:
-                    if attendance.status == "Present":
-                        student.present_count += 1
-                    elif attendance.status == "Absent":
-                        student.absent_count += 1
-                    # else:
-                    #     student.leave_count += 1
+@frappe.whitelist()
+def get_guardian_numbers(student_id):
+    """Return all guardian names and mobile numbers for a given student."""
+    from frappe.query_builder import DocType
 
-            #  Add total approved leaves from Student Leave Application
-            total_leaves = frappe.db.count(
-                "Student Leave Application",
-                filters={"student": student.student, "mark_as_present": "1"}
-            )
-            # print(total_leaves)
-            student.leave_count = total_leaves
+    StudentGuardian = DocType("Student Guardian")
+    Guardian = DocType("Guardian")
 
-        return student_list
+    # Join Student Guardian child table with Guardian to fetch mobile numbers
+    guardians = (
+        frappe.qb.from_(StudentGuardian)
+        .join(Guardian)
+        .on(StudentGuardian.guardian == Guardian.name)
+        .select(
+            Guardian.guardian_name,
+            Guardian.mobile_number
+        )
+        .where(StudentGuardian.parent == student_id)
+    ).run(as_dict=True)
+    print(guardians)
+    # Return clean list
+    return guardians or []
 
-    else:
-        return []
 
-# @frappe.whitelist()
-# def get_student_attendance_records(based_on, date=None, student_group=None, course_schedule=None):
-#     if frappe.session.user:
-#         # Get student group for the logged-in teacher
-#         # if not student_group:
-#         #     student_group = get_instructor_group()  # Get the student's group from the teacher's record
-#         student_list = []
+# def get_basic_student_data(student_group):
+#     """Return minimal info — ID, name, roll no, compressed base64 image, and attendance status flags."""
 
-#         # THIS CODE IS NOT USED IN APP. Fetch students based on Course Schedule if provided
-#         if based_on == "Course Schedule":
-#             student_group = frappe.db.get_value(
-#                 "Course Schedule", course_schedule, "student_group"
-#             )
-#             if student_group:
-#                 student_list = frappe.get_all(
-#                     "Student Group Student",
-#                     fields=["student", "student_name", "group_roll_number"],
-#                     filters={"parent": student_group, "active": 1},
-#                     order_by="group_roll_number",
-#                 )
+#     # Step 1: Fetch all active students in the group
+#     student_list = frappe.get_all(
+#         "Student Group Student",
+#         fields=["student", "student_name", "group_roll_number"],
+#         filters={"parent": student_group, "active": 1},
+#         order_by="group_roll_number",
+#     )
 
-#         if not student_list:
-#             student_list = frappe.get_all(
-#                 "Student Group Student",
-#                 fields=["student", "student_name", "group_roll_number"],
-#                 filters={"parent": student_group, "active": 1},
-#                 order_by="group_roll_number",
-#             )
+#     # Step 2: Collect all student IDs
+#     student_ids = [s.student for s in student_list]
+#     today = date.today()
 
-#         StudentAttendance = frappe.qb.DocType("Student Attendance")
+#     # Step 3: Fetch today's attendance records for these students
+#     attendance_records = frappe.get_all(
+#         "Student Attendance",
+#         filters={"student": ["in", student_ids], "date": today},
+#         fields=["student", "status"],
+#     )
 
-#         # THIS CODE IS NOT USED IN APP. Fetch student attendance if course_schedule is provided
-#         if course_schedule:
-#             student_attendance_list = (
-#                 frappe.qb.from_(StudentAttendance)
-#                 .select(StudentAttendance.student, StudentAttendance.status)
-#                 .where((StudentAttendance.course_schedule == course_schedule))
-#             ).run(as_dict=True)
-#         else:
-#             student_attendance_list = (
-#                 frappe.qb.from_(StudentAttendance)
-#                 .select(StudentAttendance.student, StudentAttendance.status)
-#                 .where(
-#                     (StudentAttendance.student_group == student_group)
-#                     & (StudentAttendance.date == date)
-#                     & (
-#                         (StudentAttendance.course_schedule == "")
-#                         | (StudentAttendance.course_schedule.isnull())
-#                     )
-#                 )
-#             ).run(as_dict=True)
-        
+#     # Step 4: Separate them into two sets for quick lookup
+#     present_stud = {rec.student for rec in attendance_records if rec.status.lower() == "present"}
+#     on_leave_stud = {rec.student for rec in attendance_records if rec.status.lower() in "leave"}
 
-#         #This part adds todays status to the response
-#         date = getdate()
-#         today_attendance_list = (
+#     # Step 5: Enrich each student
+#     for student in student_list:
+#         student_doc = frappe.get_doc("Student", student.student)
+#         profile = student_doc.image
+
+#         # Base64 compressed profile image
+#         student.base64profile = (
+#             convert_image_to_base64_with_compression(profile) if profile else None
+#         )
+
+#         # Mark attendance and leave flags
+#         student.present = 1 if student.student in present_stud else 0
+#         student.on_leave = 1 if student.student in on_leave_stud else 0
+
+#     return student_list
+
+# ---------------------- DETAILED STUDENT DATA ---------------------- #
+# def get_detailed_student_data(student_group, date=None, course_schedule=None):
+#     """Returns full data — includes personal info, today's attendance, and summary counts."""
+#     student_list = frappe.get_all(
+#         "Student Group Student",
+#         fields=["student", "student_name", "group_roll_number"],
+#         filters={"parent": student_group, "active": 1},
+#         order_by="group_roll_number",
+#     )
+
+#     StudentAttendance = frappe.qb.DocType("Student Attendance")
+
+#     # Fetch attendance list
+#     if course_schedule:
+#         student_attendance_list = (
+#             frappe.qb.from_(StudentAttendance)
+#             .select(StudentAttendance.student, StudentAttendance.status)
+#             .where(StudentAttendance.course_schedule == course_schedule)
+#         ).run(as_dict=True)
+#     else:
+#         student_attendance_list = (
 #             frappe.qb.from_(StudentAttendance)
 #             .select(StudentAttendance.student, StudentAttendance.status)
 #             .where(
 #                 (StudentAttendance.student_group == student_group)
 #                 & (StudentAttendance.date == date)
+#                 & (
+#                     (StudentAttendance.course_schedule == "")
+#                     | (StudentAttendance.course_schedule.isnull())
 #                 )
-#             ).run(as_dict=True)
-#         for student in student_list:
-#             student_doc = frappe.get_doc("Student", {"name": student.student})
-#             student.address = student_doc.address_line_1
-#             student.mobile = student_doc.student_mobile_number
-#             profile = student_doc.image
-#             base64image = convert_image_to_base64(profile) if profile else None
-#             student.base64profile = base64image
-#             for attendance in today_attendance_list:
-#                 if student.student == attendance.student:
-#                     student.status = attendance.status
-
-
-
-#         #This part adds present and absent count to the response
-#         all_attendance_list = (
-#             frappe.qb.from_(StudentAttendance)
-#             .select(StudentAttendance.student, StudentAttendance.status)
-#             .where(
-#                 (StudentAttendance.student_group == student_group)
 #             )
 #         ).run(as_dict=True)
-#         for student in student_list:
-#             student.present_count = 0
-#             student.absent_count = 0
-#             student.leave_count = 0
-#             for attendance in all_attendance_list:
-#                 if student.student == attendance.student:
-#                     if attendance.status == "Present":
-#                         student.present_count += 1
-#                     elif attendance.status == "Absent":
-#                         student.absent_count += 1
-#                     else: 
-#                         student.leave_count += 1
 
-#         # Add student_group to the response structure
-#         # response = {
-#         #     "message": student_list  # Add the students below it
-#         # }
-#         return student_list
-#     else:
-#         return
+#     # Today's attendance
+#     from frappe.utils import getdate
+#     date = getdate()
+#     today_attendance_list = (
+#         frappe.qb.from_(StudentAttendance)
+#         .select(StudentAttendance.student, StudentAttendance.status)
+#         .where(
+#             (StudentAttendance.student_group == student_group)
+#             & (StudentAttendance.date == date)
+#         )
+#     ).run(as_dict=True)
+
+#     # All attendance for counts
+#     all_attendance_list = (
+#         frappe.qb.from_(StudentAttendance)
+#         .select(StudentAttendance.student, StudentAttendance.status)
+#         .where(StudentAttendance.student_group == student_group)
+#     ).run(as_dict=True)
+
+#     # Main loop: gather all details
+#     for student in student_list:
+#         student_doc = frappe.get_doc("Student", {"name": student.student})
+
+#         # Common info
+#         profile = student_doc.image
+#         student.base64profile = convert_image_to_base64(profile) if profile else None
+#         student.address = student_doc.address_line_1
+#         student.mobile = student_doc.student_mobile_number
+
+#         # Today's attendance
+#         student.status = None
+#         for attendance in today_attendance_list:
+#             if student.student == attendance.student:
+#                 student.status = attendance.status
+#                 break
+
+#         # Attendance summary
+#         student.present_count = 0
+#         student.absent_count = 0
+#         student.leave_count = 0
+
+#         for attendance in all_attendance_list:
+#             if student.student == attendance.student:
+#                 if attendance.status == "Present":
+#                     student.present_count += 1
+#                 elif attendance.status == "Absent":
+#                     student.absent_count += 1
+#                 else:
+#                     student.leave_count += 1
+
+#     return student_list
+
 
 
 @frappe.whitelist()
@@ -2964,36 +3142,46 @@ def get_leave_application(name):
         # Handle case where document is not found
         return {"message": "Leave application not found for the specified student and group."}
 
+
 @frappe.whitelist()
 def get_leave_application_list(student_group, student=None):
-    if frappe.session.user:
-        # If a student is specified, return the leave application for that student
-        if student:
-            return get_leave_application(student_group, student)
-        
-        # Fetch all leave applications for the given student group with docstatus = 0 (Draft)
-        leave_list = frappe.get_all(
-            "Student Leave Application",
-            fields=["name", "student", "student_name", "from_date", "to_date", "total_leave_days", "reason", "document"],
-            filters={
-                "student_group": student_group,
-                "mark_as_present": 0,
-                "docstatus": 0
-            }
-        )
-        
-        # Convert image URLs to base64 if document exists
-        for leave in leave_list:
-            if leave.get("document"):
-                image_url = leave["document"]
-                leave["document_base64"] = convert_image_to_base64(image_url)
+    print(student_group)
+    """Return list of draft leave applications for a group or a single student's leave details."""
+    
+    # Ensure user is logged in
+    if not frappe.session.user:
+        frappe.throw("You must be logged in to access this data.")
+    
+    # If a specific student is provided → delegate to get_leave_application()
+    if student:
+        return get_leave_application(student_group, student)
+    
+    # Fetch all DRAFT (docstatus = 0) leave applications for the group
+    leave_list = frappe.get_all(
+        "Student Leave Application",
+        fields=[
+            "name",
+            "student",
+            "student_name",
+            "from_date",
+            "to_date",
+            "total_leave_days",
+            "reason",
+            "document",
+            "mark_as_present",
+            "docstatus"
+        ],
+        filters={
+            "student_group": student_group
+        },
+        order_by="creation desc"
+    )
 
-        print(leave_list)
-        return leave_list
-    else:
-        return
-
-
+    # Optional: Attach document image URL if present
+    for leave in leave_list:
+        leave["img_url"] = leave.get("document") if leave.get("document") else None
+    print(leave_list)
+    return leave_list
 
 
 
@@ -3041,38 +3229,30 @@ def convert_image_to_base64(image_url):
 
     return None
 
+
 @frappe.whitelist()
-def update_leave_status(name, status):
+def approve_leave(name):
     try:
         leave = frappe.get_doc("Student Leave Application", name)
         if not leave:
             return {"success": False, "message": "Leave application not found.", "status": None}
 
-        status = status.lower()
-        message = "Invalid status."
-
-        if status == "approved":
-            leave.mark_as_present = 1
-            leave.save(ignore_permissions=True)
-            leave.submit()
-            message = "Leave approved and submitted successfully."
-
-        elif status == "rejected":
-            leave.delete(ignore_permissions=True)
-            message = "Leave application rejected and deleted successfully."
+        # Approve and submit the leave
+        leave.save(ignore_permissions=True)
+        leave.submit()
 
         frappe.db.commit()
 
         return {
             "success": True,
-            "message": message,
+            "message": "Leave approved and submitted successfully.",
             "name": name,
-            "status": status.capitalize(),
+            "status": "Approved",
         }
 
     except Exception as e:
         frappe.db.rollback()
-        frappe.log_error(frappe.get_traceback(), "Update Leave Status Error")
+        frappe.log_error(frappe.get_traceback(), "Approve Leave Error")
         return {"success": False, "message": f"An error occurred: {str(e)}", "status": None}
 
 

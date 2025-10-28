@@ -141,14 +141,15 @@
 
           <!-- Profile Image Component -->
           <div class="md:col-span-2 lg:col-span-3">
-          <StudentProfileImage
-            :student-id="studentId"
-            :current-image="routeBase64Image"
-            :student-name="studentInfo.student_name"
-            @image-updated="handleImageUpdated"
-            @success="msg => showSuccess(msg)"
-            @error="msg => showError(msg)"
-          />
+<!-- Make sure the StudentProfileImage is receiving the routeImageUrl -->
+<StudentProfileImage
+  :student-id="studentId"
+  :current-image="routeImageUrl"
+  :student-name="studentInfo.student_name"
+  @image-updated="handleImageUpdated"
+  @success="msg => showSuccess(msg)"
+  @error="msg => showError(msg)"
+/>
           </div>
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
@@ -599,6 +600,8 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const alertAnimation = ref('')
 const studentDetailsError = ref('')
+// const studentImageUrl = ref('')
+
 
 // Guardian management state
 const guardians = ref([])
@@ -641,29 +644,68 @@ const isGuardianLimitReached = computed(() => {
   return guardians.value.length >= 3
 })
 
-// Add this computed property to extract base64 image from route
-const routeBase64Image = computed(() => {
-  if (!route.query.studentData) {
-    console.log('❌ No studentData in route query')
-    return ''
+// Replace the current routeImageUrl computed property with this:
+// Add a reactive ref to store the image URL from route
+const studentImageUrl = ref('')
+
+// Update the routeImageUrl computed property to use the stored image URL
+const routeImageUrl = computed(() => {
+  if (studentImageUrl.value) {
+    console.log('🖼️ Using stored image URL:', studentImageUrl.value)
+    return getProfileImageUrl(studentImageUrl.value)
   }
   
-  try {
-    const data = JSON.parse(decodeURIComponent(route.query.studentData))
-    const base64Data = data.base64profile || ''
-    
-    console.log('🖼️ Image from route:', {
-      exists: !!base64Data,
-      length: base64Data?.length || 0,
-      type: base64Data?.startsWith('data:') ? 'data-url' : 'base64-raw'
-    })
-    
-    return base64Data
-  } catch (e) {
-    console.error('Error parsing route image data:', e)
-    return ''
-  }
+  console.log('❌ No image URL available')
+  return ''
 })
+
+// In onMounted, extract and store the image URL from route
+onMounted(() => {
+  studentId.value = route.query.studentId
+
+  if (route.query.studentData) {
+    try {
+      const data = JSON.parse(decodeURIComponent(route.query.studentData))
+      studentGroup.value = data.student_group || ''
+      
+      // Store the image URL from route data
+      studentImageUrl.value = data.img_url || ''
+      
+      console.log('🎯 Route data analysis:', {
+        studentGroup: studentGroup.value,
+        hasImgUrl: !!data.img_url,
+        imgUrl: data.img_url,
+        allKeys: Object.keys(data) // See all available data
+      })
+      
+    } catch (e) {
+      console.error('Error parsing student data:', e)
+      showError('Invalid student data')
+    }
+  }
+
+  fetchAdminSettings()
+  fetchStudentDetails()
+})
+
+// Add this helper function:
+const getProfileImageUrl = (imgUrl) => {
+  if (!imgUrl) return null
+  
+  // If URL is already absolute, use it directly
+  if (imgUrl.startsWith('http') || imgUrl.startsWith('//')) {
+    return imgUrl
+  }
+  
+  // If URL starts with /, prepend current origin
+  if (imgUrl.startsWith('/')) {
+    return window.location.origin + imgUrl
+  }
+  
+  // For relative URLs, construct full URL
+  const baseUrl = window.location.origin
+  return `${baseUrl}/${imgUrl.replace(/^\//, '')}`
+}
 
 // Alert helpers
 const showError = (message) => {
@@ -688,9 +730,11 @@ const hideAlert = () => {
 }
 
 // Add this method to handle image updates
+// Update the image updated handler to store the new URL
 const handleImageUpdated = (newImageUrl) => {
   console.log('📸 Image updated in StudentProfileImage:', newImageUrl)
-  // If you need to store the updated image URL somewhere
+  // Store the new image URL so it persists
+  studentImageUrl.value = newImageUrl
 }
 
 // API Resources
@@ -942,13 +986,6 @@ onMounted(() => {
     try {
       const data = JSON.parse(decodeURIComponent(route.query.studentData))
       studentGroup.value = data.student_group || ''
-      
-      console.log('🎯 Route data analysis:', {
-        studentGroup: studentGroup.value,
-        hasBase64profile: !!data.base64profile,
-        base64profileLength: data.base64profile?.length || 0,
-        allKeys: Object.keys(data) // See all available data
-      })
       
     } catch (e) {
       console.error('Error parsing student data:', e)

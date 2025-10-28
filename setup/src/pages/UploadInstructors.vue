@@ -28,7 +28,7 @@
             >
               <span class="button-content">
                 <span v-if="processing" class="spinner"></span>
-                {{ processing ? 'Processing...' : 'Enroll Teachers ✅' }}
+                {{ processing ? 'Processing...' : 'Enroll Teachers' }}
               </span>
             </button>
           </div>
@@ -63,7 +63,7 @@
           <h4 class="section-title">Successfully Enrolled ({{ enrolledTeachers.length }})</h4>
           <div class="results-list">
             <div v-for="(teacher, index) in enrolledTeachers" :key="index" class="success-message">
-              ✅ {{ teacher }}
+              <span class="status-badge success">Success</span> {{ teacher }}
             </div>
           </div>
         </div>
@@ -77,7 +77,9 @@
                 <strong>{{ failure.instructor_data['First Name'] }} {{ failure.instructor_data['Middle Name'] }} {{ failure.instructor_data['Last Name'] }}</strong>
                 <span class="student-details">(Email: {{ failure.instructor_data['Email'] }}, Mobile: {{ failure.instructor_data['Mobile'] }})</span>
               </div>
-              <div class="error-text">❌ {{ failure.error }}</div>
+              <div class="error-text">
+                <span class="status-badge error">Error</span> {{ failure.error }}
+              </div>
             </div>
           </div>
         </div>
@@ -126,7 +128,7 @@
                   </span>
                 </div>
               <div class="error-text">
-                ⚠️ 
+                <span class="status-badge warning">Warning</span>
                 <span v-if="getRowError(row).includes(';')" class="multiple-errors">
                   {{ getRowError(row) }}
                 </span>
@@ -156,7 +158,7 @@
                     <th class="status-cell">Status</th>
                     <th>Class/Program <span class="optional">(Optional)</span></th>
                     <th>Division/Student Group <span class="optional">(Optional)</span></th>
-                    <th v-for="(_, index) in previewHeaders" :key="'letter-'+index">
+                    <th v-for="(header, index) in filteredHeaders" :key="'letter-'+index">
                       {{ getExcelColumnLetter(index) }}
                     </th>
                   </tr>
@@ -165,11 +167,11 @@
                     <th class="status-cell"></th>
                     <th>Class/Program</th>
                     <th>Division/Student Group</th>
-                    <th v-for="(header, index) in previewHeaders" :key="'header-'+index">
+                    <th v-for="(header, index) in filteredHeaders" :key="'header-'+index">
                       <select
-                        v-model="mappings[index].type"
+                        v-model="filteredMappings[index].type"
                         class="table-select"
-                        @change="updateMapping(index, 'type', $event.target.value)"
+                        @change="updateMapping(filteredMappings[index].originalIndex, 'type', $event.target.value)"
                       >
                         <option :value="null">Select Field</option>
                         <option v-for="(option, i) in options" :key="i" :value="option">
@@ -185,17 +187,15 @@
                       :class="getRowStatusClass(row)">
                     <td class="actions">
                       <button @click="deleteRow(rowIndex)" class="trash-icon">
-                        <span class="icon">❎</span>
+                        Delete
                       </button>
                     </td>
                     <td class="status-cell">
-                      <span v-if="row._status === 'success'" class="status-badge success">✅</span>
-                      <span v-else-if="row._status === 'error'" class="status-badge error">❌</span>
-                      <span v-else-if="!isRowValid(row)" class="status-badge warning">⚠️</span>
-                      <span v-else class="status-badge pending">🔄</span>
-                      <div v-if="row._error" class="error-tooltip">
-                        {{ row._error }}
-                      </div>
+                      <span v-if="row._status === 'success'" class="status-badge success">Success</span>
+                      <span v-else-if="row._status === 'error'" class="status-badge error">Error</span>
+                      <span v-else-if="!isRowValid(row)" class="status-badge warning">Warning</span>
+                      <span v-else class="status-badge pending">Pending</span>
+                      <div v-if="row._error" class="error-tooltip">{{ row._error }}</div>
                     </td>
                     <td>
                       <select 
@@ -225,7 +225,7 @@
                         Select division if this teacher is a class teacher
                       </div>
                     </td>
-                    <td v-for="(header, colIndex) in previewHeaders" :key="colIndex">
+                    <td v-for="(header, colIndex) in filteredHeaders" :key="colIndex">
                       <input
                         v-model="row[header]"
                         class="table-input"
@@ -366,6 +366,34 @@ export default {
       return previewData.value.filter(row => !isRowValid(row));
     });
 
+    // Filter out empty/undefined columns
+    const filteredHeaders = computed(() => {
+      return previewHeaders.value.filter((header, index) => {
+        // Keep column if it has data in any row or has a mapping
+        const hasData = previewData.value.some(row => {
+          const value = row[header];
+          return value !== undefined && value !== null && value !== '' && value.toString().trim() !== '';
+        });
+        const hasMapping = mappings.value[index]?.type;
+        return hasData || hasMapping;
+      });
+    });
+
+    const filteredMappings = computed(() => {
+      return mappings.value.map((mapping, index) => ({
+        ...mapping,
+        originalIndex: index
+      })).filter((mapping, index) => {
+        const header = previewHeaders.value[index];
+        const hasData = previewData.value.some(row => {
+          const value = row[header];
+          return value !== undefined && value !== null && value !== '' && value.toString().trim() !== '';
+        });
+        const hasMapping = mapping.type;
+        return hasData || hasMapping;
+      });
+    });
+
     // Methods for error teachers display
     function getTeacherFullName(row) {
       const teacher = prepareTeacherData(row);
@@ -383,9 +411,6 @@ export default {
     }
 
     function getRowError(row) {
-      // Completely ignore enrollment errors in field validation
-      // Enrollment errors should only appear in the enrollment results section
-      
       const errors = [];
       
       // Check for missing required fields
@@ -515,7 +540,7 @@ export default {
           
           // Show appropriate message and modal
           if (failedEnrollments.value.length === 0) {
-            showMessage(`✅ Successfully enrolled all ${enrolledTeachers.value.length} teachers!`, 'success');
+            showMessage(`Successfully enrolled all ${enrolledTeachers.value.length} teachers!`, 'success');
             showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${enrolledTeachers.value.length} teachers!`);
           } else {
             showMessage(`Completed: ${enrolledTeachers.value.length} successful, ${failedEnrollments.value.length} failed.`, 'warning');
@@ -1171,11 +1196,13 @@ export default {
       resultModalType,
       resultModalTitle,
       resultModalDescription,
-      showErrorTeachersList, // REMOVED DUPLICATES BELOW
+      showErrorTeachersList,
       validRowsCount,
       classTeachersCount,
       invalidRowsCount,
       errorRows,
+      filteredHeaders,
+      filteredMappings,
       getTeacherFullName,
       getTeacherEmail,
       getTeacherMobile,

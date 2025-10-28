@@ -123,7 +123,7 @@
             >
               <span class="button-content">
                 <span v-if="processing" class="spinner"></span>
-                {{ processing ? 'Processing...' : 'Enroll Students ✅' }}
+                {{ processing ? 'Processing...' : 'Enroll Students' }}
               </span>
             </button>
           </div>
@@ -158,7 +158,7 @@
           <h4 class="section-title">Successfully Enrolled ({{ enrolledStudents.length }})</h4>
           <div class="results-list">
             <div v-for="(student, index) in enrolledStudents" :key="index" class="success-message">
-              ✅ {{ student }}
+              <span class="status-badge success">Success</span> {{ student }}
             </div>
           </div>
         </div>
@@ -172,7 +172,9 @@
                 <strong>{{ failure.student_data['First Name'] }} {{ failure.student_data['Middle Name'] }} {{ failure.student_data['Last Name'] }}</strong>
                 <span class="student-details">(GR: {{ failure.student_data['GR Number'] }}, Roll: {{ failure.student_data['Roll No'] }})</span>
               </div>
-              <div class="error-text">❌ {{ failure.error }}</div>
+              <div class="error-text">
+                <span class="status-badge error">Error</span> {{ failure.error }}
+              </div>
             </div>
           </div>
         </div>
@@ -217,7 +219,7 @@
                   </span>
                 </div>
                 <div class="error-text">
-                  ⚠️ 
+                  <span class="status-badge warning">Warning</span>
                   <span v-if="getRowError(row).includes(';')" class="multiple-errors">
                     {{ getRowError(row) }}
                   </span>
@@ -241,18 +243,18 @@
                   <tr>
                     <th class="actions">Actions</th>
                     <th class="status-cell">Status</th>
-                    <th v-for="(_, index) in previewHeaders" :key="'letter-'+index">
+                    <th v-for="(header, index) in filteredHeaders" :key="'letter-'+index">
                       {{ getExcelColumnLetter(index) }}
                     </th>
                   </tr>
                   <tr>
                     <th class="actions"></th>
                     <th class="status-cell"></th>
-                    <th v-for="(header, index) in previewHeaders" :key="'header-'+index">
+                    <th v-for="(header, index) in filteredHeaders" :key="'header-'+index">
                       <select
-                        v-model="mappings[index].type"
+                        v-model="filteredMappings[index].type"
                         class="table-select"
-                        @change="updateMapping(index, 'type', $event.target.value)"
+                        @change="updateMapping(filteredMappings[index].originalIndex, 'type', $event.target.value)"
                       >
                         <option :value="null">Select Field</option>
                         <option v-for="(option, i) in options" :key="i" :value="option">
@@ -268,19 +270,19 @@
                       :class="getRowStatusClass(row)">
                     <td class="actions">
                       <button @click="deleteRow(rowIndex)" class="trash-icon">
-                        <span class="icon">❎</span>
+                        Delete
                       </button>
                     </td>
                     <td class="status-cell">
-                      <span v-if="row._status === 'success'" class="status-badge success">✅</span>
-                      <span v-else-if="row._status === 'error'" class="status-badge error">❌</span>
-                      <span v-else-if="!isRowValid(row)" class="status-badge warning">⚠️</span>
-                      <span v-else class="status-badge pending">🔄</span>
+                      <span v-if="row._status === 'success'" class="status-badge success">Success</span>
+                      <span v-else-if="row._status === 'error'" class="status-badge error">Error</span>
+                      <span v-else-if="!isRowValid(row)" class="status-badge warning">Warning</span>
+                      <span v-else class="status-badge pending">Pending</span>
                       <div v-if="row._error" class="error-tooltip">
                         {{ row._error }}
                       </div>
                     </td>
-                    <td v-for="(header, colIndex) in previewHeaders" :key="colIndex">
+                    <td v-for="(header, colIndex) in filteredHeaders" :key="colIndex">
                       <input
                         v-model="row[header]"
                         class="table-input"
@@ -366,7 +368,7 @@ export default {
     const resultModalTitle = ref('');
     const resultModalDescription = ref('');
 
-    // Computed properties - SINGLE DECLARATION
+    // Computed properties
     const validRowsCount = computed(() => {
       return previewData.value.filter(row => isRowValid(row)).length;
     });
@@ -379,7 +381,35 @@ export default {
       return previewData.value.filter(row => !isRowValid(row));
     });
 
-    // Methods for error students display - SINGLE DECLARATION
+    // Filter out empty/undefined columns
+    const filteredHeaders = computed(() => {
+      return previewHeaders.value.filter((header, index) => {
+        // Keep column if it has data in any row or has a mapping
+        const hasData = previewData.value.some(row => {
+          const value = row[header];
+          return value !== undefined && value !== null && value !== '' && value.toString().trim() !== '';
+        });
+        const hasMapping = mappings.value[index]?.type;
+        return hasData || hasMapping;
+      });
+    });
+
+    const filteredMappings = computed(() => {
+      return mappings.value.map((mapping, index) => ({
+        ...mapping,
+        originalIndex: index
+      })).filter((mapping, index) => {
+        const header = previewHeaders.value[index];
+        const hasData = previewData.value.some(row => {
+          const value = row[header];
+          return value !== undefined && value !== null && value !== '' && value.toString().trim() !== '';
+        });
+        const hasMapping = mapping.type;
+        return hasData || hasMapping;
+      });
+    });
+
+    // Methods for error students display
     function getStudentFullName(row) {
       const student = prepareStudentData(row);
       return `${student['First Name'] || ''} ${student['Middle Name'] || ''} ${student['Last Name'] || ''}`.trim() || 'Unknown Student';
@@ -394,11 +424,8 @@ export default {
       const student = prepareStudentData(row);
       return student['Roll No'] || 'N/A';
     }
-
+    
     function getRowError(row) {
-      // Completely ignore enrollment errors in field validation
-      // Enrollment errors should only appear in the enrollment results section
-      
       const errors = [];
       
       // Check for missing required fields
@@ -408,7 +435,6 @@ export default {
         const mappingIndex = mappings.value.findIndex(m => m.type === field);
         
         if (mappingIndex === -1) {
-          // Field is not mapped at all
           errors.push(`${field} not mapped`);
         } else {
           const columnIndex = XLSX.utils.decode_col(mappings.value[mappingIndex].column);
@@ -421,11 +447,15 @@ export default {
         }
       });
       
-      // Check for date validation errors
+      // ✅ FIX: Only validate Student Date of Birth if it's provided and not empty
       const student = prepareStudentData(row);
-      const dobValidation = validateDateField(student['Student Date of Birth'], 'Student Date of Birth');
-      if (!dobValidation.isValid) {
-        errors.push(dobValidation.error);
+      const studentDob = student['Student Date of Birth'];
+      
+      if (studentDob && studentDob.toString().trim() !== '') {
+        const dobValidation = validateDateField(studentDob, 'Student Date of Birth');
+        if (!dobValidation.isValid) {
+          errors.push(dobValidation.error);
+        }
       }
       
       if (errors.length > 0) {
@@ -434,11 +464,6 @@ export default {
       
       return 'Check field mappings';
     }
-
-    // REMOVED: Delete the duplicate showErrorStudents method since we're using direct toggle
-    // function showErrorStudents() {
-    //   showErrorStudentsList.value = !showErrorStudentsList.value;
-    // }
 
     // API Resources
     const academicYearsResource = createResource({
@@ -513,12 +538,12 @@ export default {
             failed: data.failed_enrollments.length
           };
           
-          // Update row statuses based on bulk response - FIXED to handle successful enrollments
+          // Update row statuses based on bulk response
           updateRowStatusesFromBulkResponse(data.enrolled_students, data.failed_enrollments);
           
           // Show appropriate message and modal
           if (failedEnrollments.value.length === 0) {
-            showMessage(`✅ Successfully enrolled all ${enrolledStudents.value.length} students!`, 'success');
+            showMessage(`Successfully enrolled all ${enrolledStudents.value.length} students!`, 'success');
             showResultModalFunc('success', 'Enrollment Complete', `Successfully enrolled all ${enrolledStudents.value.length} students!`);
           } else {
             showMessage(`Completed: ${enrolledStudents.value.length} successful, ${failedEnrollments.value.length} failed.`, 'warning');
@@ -1124,6 +1149,8 @@ export default {
       validRowsCount,
       invalidRowsCount,
       errorRows,
+      filteredHeaders,
+      filteredMappings,
       getStudentFullName,
       getStudentGR,
       getStudentRoll,

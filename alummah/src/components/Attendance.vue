@@ -18,33 +18,90 @@
     <div v-else-if="students && students.length > 0" class="space-y-3">
       <div class="flex justify-between items-center mb-4">
         <p class="text-sm text-gray-600">
-          Total: {{ students.length }} | Present: {{ presentStudents.length }} | Absent: {{ students.length - presentStudents.length }}
+          Total: {{ students.length }} | 
+          To Mark Present: {{ presentStudents.length }} | 
+          To Mark Absent: {{ availableStudents.length - presentStudents.length }} |
+          Already Marked: {{ markedStudentsCount }}
         </p>
         <button
           @click="toggleAllStudents"
           class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          :disabled="allStudentsMarked"
         >
-          {{ presentStudents.length === students.length ? 'Mark All Absent' : 'Mark All Present' }}
+          {{ presentStudents.length === availableStudents.length ? 'Mark All Absent' : 'Mark All Present' }}
         </button>
       </div>
 
+      <!-- Already Marked Students (Present = 1 or On Leave = 1 - Greyed out) -->
       <div 
-        v-for="student in students" 
+        v-for="student in markedStudents" 
         :key="student.student"
-        class="bg-white rounded-lg shadow-sm p-4 border-2 transition-colors cursor-pointer"
+        class="bg-gray-100 rounded-lg shadow-sm p-4 border-2 border-gray-300 cursor-not-allowed"
+      >
+        <div class="flex items-center space-x-4">
+          <!-- Student Avatar -->
+          <div class="flex-shrink-0">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm relative overflow-hidden"
+                 :class="student.present === 1 ? 'bg-gradient-to-br from-green-400 to-green-500' : 'bg-gradient-to-br from-yellow-400 to-yellow-500'">
+              <img
+                v-if="student.img_url"
+                :src="getProfileImageUrl(student.img_url)"
+                alt="Student"
+                class="absolute inset-0 w-full h-full object-cover opacity-70"
+                @error="handleImageError"
+                loading="lazy"
+              />
+              <span v-else class="text-white text-sm font-medium opacity-70">
+                {{ getInitials(student.student_name) }}
+              </span>
+            </div>
+          </div>
+          
+          <div class="flex-1 min-w-0">
+            <h3 class="font-medium text-gray-500 truncate">{{ student.student_name }}</h3>
+            <div class="flex items-center space-x-4 text-sm text-gray-500">
+              <span>Roll No: {{ student.group_roll_number }}</span>
+              <span class="text-gray-400">•</span>
+              <span class="truncate">{{ student.student }}</span>
+            </div>
+            <div class="flex items-center space-x-2 mt-1">
+              <CheckIcon v-if="student.present === 1" class="w-4 h-4 text-green-500" />
+              <ClockIcon v-if="student.on_leave === 1" class="w-4 h-4 text-yellow-500" />
+              <span class="text-xs font-medium" :class="student.present === 1 ? 'text-green-600' : 'text-yellow-600'">
+                {{ student.present === 1 ? 'Already Marked Present' : 'On Leave' }}
+              </span>
+            </div>
+          </div>
+          
+          <div class="flex-shrink-0">
+            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center"
+                 :class="student.present === 1 ? 'bg-green-500 border-green-500' : 'bg-yellow-500 border-yellow-500'">
+              <CheckIcon v-if="student.present === 1" class="w-4 h-4 text-white" />
+              <MinusIcon v-if="student.on_leave === 1" class="w-4 h-4 text-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Available Students (Present = 0 and On Leave = 0 - Can be marked) -->
+      <div 
+        v-for="student in availableStudents" 
+        :key="student.student"
+        class="bg-white rounded-lg shadow-sm p-4 border-2 transition-colors cursor-pointer hover:border-blue-300"
         :class="presentStudents.includes(student.student) ? 'border-green-500 bg-green-50' : 'border-gray-200'"
         @click="toggleStudentAttendance(student.student)"
       >
         <div class="flex items-center space-x-4">
-          <!-- Student Avatar with better fallback -->
+          <!-- Student Avatar -->
           <div class="flex-shrink-0">
             <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm relative overflow-hidden">
               <img
-                v-if="student.base64profile && student.base64profile !== 'null'"
-                :src="getProfileImage(student)"
+                v-if="student.img_url"
+                :src="getProfileImageUrl(student.img_url)"
                 alt="Student"
                 class="absolute inset-0 w-full h-full object-cover"
                 @error="handleImageError"
+                loading="lazy"
               />
               <span v-else class="text-white text-sm font-medium">
                 {{ getInitials(student.student_name) }}
@@ -94,19 +151,11 @@
 
       <button
         @click="handleSubmitAttendance"
-        :disabled="submitting"
+        :disabled="submitting || availableStudents.length === 0"
         class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <ArrowRightIcon class="w-5 h-5" />
         <span>{{ submitting ? 'Submitting...' : 'Submit' }}</span>
-      </button>
-
-      <button
-        @click="fetchAttendanceData"
-        class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
-      >
-        <ArrowPathIcon class="w-5 h-5" />
-        <span>Refresh</span>
       </button>
     </div>
 
@@ -114,8 +163,12 @@
     <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Confirm Attendance</h3>
-        <p class="text-gray-600 mb-2">Present: {{ presentStudents.length }}</p>
-        <p class="text-gray-600 mb-6">Absent: {{ students.length - presentStudents.length }}</p>
+        <p class="text-gray-600 mb-2">To Mark Present: {{ presentStudents.length }}</p>
+        <p class="text-gray-600 mb-2">To Mark Absent: {{ availableStudents.length - presentStudents.length }}</p>
+        <p class="text-gray-600 mb-4">Already Marked: {{ markedStudentsCount }}</p>
+        <div class="text-sm text-gray-500 mb-4">
+          Note: Students already marked as "Present" or "On Leave" will not be included in this attendance submission.
+        </div>
         <div class="flex space-x-3">
           <button
             @click="showModal = false"
@@ -139,7 +192,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { createResource } from 'frappe-ui'
-import { XMarkIcon, ArrowRightIcon, ArrowPathIcon, CheckIcon } from '@heroicons/vue/24/outline'
+import { 
+  XMarkIcon, 
+  ArrowRightIcon, 
+  CheckIcon,
+  ClockIcon,
+  MinusIcon 
+} from '@heroicons/vue/24/outline'
 
 const router = useRouter()
 const props = defineProps({
@@ -155,7 +214,10 @@ const loading = ref(true)
 const showModal = ref(false)
 const submitting = ref(false)
 
-// Computed current date
+// Image cache for better performance
+const imageCache = new Map()
+
+// Computed properties
 const currentDate = computed(() => {
   return new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -164,17 +226,40 @@ const currentDate = computed(() => {
   })
 })
 
+// Separate marked (present = 1 OR on_leave = 1) and available students (both = 0)
+const markedStudents = computed(() => {
+  return students.value.filter(student => student.present === 1 || student.on_leave === 1)
+})
+
+const availableStudents = computed(() => {
+  return students.value.filter(student => student.present === 0 && student.on_leave === 0)
+})
+
+const markedStudentsCount = computed(() => {
+  return markedStudents.value.length
+})
+
+const allStudentsMarked = computed(() => {
+  return availableStudents.value.length === 0
+})
+
 // Helper functions for profile images
-const getProfileImage = (student) => {
-  if (student.base64profile && student.base64profile !== 'null') {
-    // Handle both data URL and base64 string formats
-    if (student.base64profile.startsWith('data:')) {
-      return student.base64profile
-    } else {
-      return `data:image/jpeg;base64,${student.base64profile}`
-    }
+const getProfileImageUrl = (imgUrl) => {
+  if (!imgUrl) return null
+  
+  // If URL is already absolute, use it directly
+  if (imgUrl.startsWith('http') || imgUrl.startsWith('//')) {
+    return imgUrl
   }
-  return null
+  
+  // If URL starts with /, prepend current origin
+  if (imgUrl.startsWith('/')) {
+    return window.location.origin + imgUrl
+  }
+  
+  // For relative URLs, construct full URL
+  const baseUrl = window.location.origin
+  return `${baseUrl}/${imgUrl.replace(/^\//, '')}`
 }
 
 const getInitials = (name) => {
@@ -188,7 +273,6 @@ const getInitials = (name) => {
 }
 
 const handleImageError = (event) => {
-  // Hide the broken image and let the fallback initials show
   event.target.style.display = 'none'
 }
 
@@ -212,12 +296,10 @@ const markAttendanceResource = createResource({
     console.log('Attendance marked successfully:', data)
     submitting.value = false
     
-    // Handle different response formats
     if (data.status === 'success' || data.message?.includes('successfully')) {
       alert('Success! ' + (data.message || 'Attendance has been marked successfully.'))
       router.push({ name: 'Teacherhome' })
     } else if (data._server_messages) {
-      // Handle Frappe server messages
       try {
         const serverMessages = JSON.parse(data._server_messages)
         if (serverMessages.length > 0) {
@@ -231,7 +313,6 @@ const markAttendanceResource = createResource({
       } catch (e) {
         console.error('Error parsing server messages:', e)
       }
-      // Fallback success
       alert('Success! Attendance has been marked successfully.')
       router.push({ name: 'Teacherhome' })
     } else {
@@ -271,8 +352,17 @@ const fetchAttendanceData = async () => {
     }
 
     students.value = attendanceRecords
-    // Default all students to present
-    presentStudents.value = attendanceRecords.map(student => student.student)
+    // Default all available students to present (excluding already marked students)
+    presentStudents.value = availableStudents.value.map(student => student.student)
+    
+    console.log('Loaded students:', {
+      total: students.value.length,
+      alreadyMarked: markedStudents.value.length,
+      available: availableStudents.value.length,
+      presentFlag: students.value.filter(s => s.present === 1).length,
+      onLeaveFlag: students.value.filter(s => s.on_leave === 1).length,
+      studentsWithImages: students.value.filter(s => s.img_url).length
+    })
   } catch (error) {
     console.error('Error fetching attendance:', error)
     alert('Failed to load student data.')
@@ -281,19 +371,27 @@ const fetchAttendanceData = async () => {
   }
 }
 
-// Toggle all students
+// Toggle all students (only available ones)
 const toggleAllStudents = () => {
-  if (presentStudents.value.length === students.value.length) {
-    // If all are present, mark all absent
+  if (allStudentsMarked.value) return
+  
+  if (presentStudents.value.length === availableStudents.value.length) {
+    // If all available are present, mark all absent
     presentStudents.value = []
   } else {
-    // If not all are present, mark all present
-    presentStudents.value = students.value.map(student => student.student)
+    // If not all available are present, mark all present
+    presentStudents.value = availableStudents.value.map(student => student.student)
   }
 }
 
-// Toggle student attendance
+// Toggle student attendance (only for available students)
 const toggleStudentAttendance = (studentId) => {
+  const student = students.value.find(s => s.student === studentId)
+  if (student && (student.present === 1 || student.on_leave === 1)) {
+    // Don't allow toggling for students already marked present or on leave
+    return
+  }
+  
   const index = presentStudents.value.indexOf(studentId)
   if (index > -1) {
     presentStudents.value.splice(index, 1)
@@ -311,12 +409,13 @@ const handleSubmitAttendance = () => {
   showModal.value = true
 }
 
-// Confirm attendance submission
+// Confirm attendance submission (ONLY send available students with both flags = 0)
 const confirmAttendance = async () => {
   showModal.value = false
   submitting.value = true
 
-  const studentsPresent = students.value
+  // Only include available students (not already marked present or on leave)
+  const studentsPresent = availableStudents.value
     .filter(student => presentStudents.value.includes(student.student))
     .map(student => ({
       student: student.student,
@@ -326,7 +425,7 @@ const confirmAttendance = async () => {
       checked: true,
     }))
 
-  const studentsAbsent = students.value
+  const studentsAbsent = availableStudents.value
     .filter(student => !presentStudents.value.includes(student.student))
     .map(student => ({
       student: student.student,
@@ -338,6 +437,13 @@ const confirmAttendance = async () => {
 
   const formattedDate = new Date().toISOString().split('T')[0]
   const group = props.selectedGroup || localStorage.getItem('selected_student_group')
+
+  console.log('Submitting attendance for:', {
+    present: studentsPresent.length,
+    absent: studentsAbsent.length,
+    alreadyMarked: markedStudents.value.length,
+    totalStudents: students.value.length
+  })
 
   try {
     await markAttendanceResource.submit({
