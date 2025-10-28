@@ -1,5 +1,25 @@
 <template>
   <div class="min-h-screen bg-gray-50 p-4">
+    <!-- Full Screen Image Modal -->
+    <div v-if="showFullImage" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4" @click="showFullImage = false">
+      <div class="max-w-4xl max-h-full w-full h-full flex items-center justify-center">
+        <img
+          :src="fullImageUrl"
+          alt="Full size profile photo"
+          class="max-w-full max-h-full object-contain"
+          @click.stop
+        />
+        <button
+          @click="showFullImage = false"
+          class="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+        >
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Loading State -->
     <div v-if="studentResource.loading" class="flex justify-center items-center py-8">
       <div class="spinner"></div>
@@ -20,11 +40,11 @@
       <!-- Header Section -->
       <div class="bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-lg p-6">
         <div class="flex items-center space-x-4">
-          <div class="flex-shrink-0">
+          <div class="flex-shrink-0 cursor-pointer" @click="openFullImage(student.img_url)">
             <img 
               :src="profileImage" 
               alt="Student" 
-              class="w-20 h-20 rounded-full border-4 border-white object-cover"
+              class="w-20 h-20 rounded-full border-4 border-white object-cover hover:opacity-90 transition-opacity"
               @error="handleImageError"
             />
           </div>
@@ -119,6 +139,8 @@ import { createResource } from 'frappe-ui'
 
 // Reactive state
 const student = ref({})
+const showFullImage = ref(false)
+const fullImageUrl = ref('')
 
 // Create resource for fetching student details
 const studentResource = createResource({
@@ -139,13 +161,23 @@ const studentResource = createResource({
   }
 })
 
-// Computed property for profile image
+// Computed property for profile image - UPDATED to use img_url
 const profileImage = computed(() => {
-  if (student.value.base64profile) {
-    return `data:image/jpeg;base64,${student.value.base64profile}`
+  // Use the direct image URL from backend
+  if (student.value.img_url) {
+    return student.value.img_url
   }
+  // Fallback to placeholder if no image URL
   return 'https://via.placeholder.com/150?text=Student'
 })
+
+// Open full screen image
+const openFullImage = (imgUrl) => {
+  if (imgUrl) {
+    fullImageUrl.value = imgUrl
+    showFullImage.value = true
+  }
+}
 
 // Handle image loading errors
 const handleImageError = (event) => {

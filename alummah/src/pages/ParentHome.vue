@@ -1,5 +1,23 @@
 <template>
   <div class="flex min-h-screen bg-gray-50 flex-col md:flex-row">
+    <!-- Full Screen Image Modal -->
+    <div v-if="showFullImage" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4" @click="showFullImage = false">
+      <div class="max-w-4xl max-h-full w-full h-full flex items-center justify-center">
+        <img
+          :src="fullImageUrl"
+          alt="Full size profile photo"
+          class="max-w-full max-h-full object-contain"
+          @click.stop
+        />
+        <button
+          @click="showFullImage = false"
+          class="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+        >
+          <XMarkIcon class="w-8 h-8" />
+        </button>
+      </div>
+    </div>
+
     <!-- Error State -->
     <div v-if="globalError" class="fixed inset-0 bg-red-50 bg-opacity-90 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
@@ -40,10 +58,10 @@
       <!-- Mobile Header -->
       <header class="md:hidden bg-white shadow-sm border-b border-gray-200 p-4 flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+          <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 cursor-pointer" @click="openFullImage(parent.img_url)">
             <img
-              v-if="parent.image"
-              :src="`data:image/jpeg;base64,${parent.image}`"
+              v-if="parent.img_url"
+              :src="parent.img_url"
               alt="Parent"
               class="object-cover w-full h-full"
               @error="handleImageError"
@@ -97,10 +115,10 @@
         <div class="flex-1 overflow-y-auto space-y-6 md:space-y-8">
           <!-- Parent Info Card - Hidden on mobile since we have header -->
           <div class="hidden md:flex items-start space-x-4 border-b pb-4">
-            <div class="flex-shrink-0 w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
+            <div class="flex-shrink-0 w-16 h-16 rounded-full bg-gray-200 overflow-hidden cursor-pointer" @click="openFullImage(parent.img_url)">
               <img
-                v-if="parent.image"
-                :src="`data:image/jpeg;base64,${parent.image}`"
+                v-if="parent.img_url"
+                :src="parent.img_url"
                 alt="Parent"
                 class="object-cover w-full h-full"
                 @error="handleImageError"
@@ -196,19 +214,19 @@
               </button>
             </nav>
           </div>
-        </div>
 
-        <!-- Logout Button -->
-        <div class="pt-4 border-t border-gray-200 flex-shrink-0">
+          <!-- Add this after the navigation buttons section -->
+        <div class="pt-4 border-t border-gray-200">
           <button
-            class="w-full px-4 py-3 rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 flex items-center justify-center space-x-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
             @click="handleLogout"
-            :disabled="userDetailsResource.loading"
+            class="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium"
           >
-            <ArrowRightOnRectangleIcon class="w-5 h-5 flex-shrink-0" />
+            <ArrowRightOnRectangleIcon class="w-5 h-5" />
             <span>Logout</span>
           </button>
         </div>
+        </div>
+        
       </aside>
 
       <!-- Main Content Area -->
@@ -339,6 +357,8 @@ const showSidebar = ref(false)
 const activeView = ref('dashboard')
 const globalError = ref(null)
 const hasInitialData = ref(false)
+const showFullImage = ref(false)
+const fullImageUrl = ref('')
 
 // Component mapping
 const componentMap = {
@@ -359,6 +379,14 @@ const setActiveView = (view) => {
   }
 }
 
+// Open full screen image
+const openFullImage = (imgUrl) => {
+  if (imgUrl) {
+    fullImageUrl.value = imgUrl
+    showFullImage.value = true
+  }
+}
+
 // Get current user and role
 const currentUser = session.user
 const currentRole = 'parent'
@@ -373,7 +401,7 @@ const initializeFromLocalStorage = () => {
       const userDetails = JSON.parse(userDetailsData)
       parent.value = {
         name: userDetails.name,
-        image: userDetails.base64profile,
+        img_url: userDetails.img_url, // Updated to use img_url
         address: userDetails.address
       }
       if (userDetails.student_list?.length) {
@@ -391,34 +419,38 @@ const initializeFromLocalStorage = () => {
   }
 }
 
-// Create resource for API call
+// Create resource for API call - UPDATED to use guardian API
 const userDetailsResource = createResource({
-  url: 'school.al_ummah.api2.get_user_details',
+  url: 'school.al_ummah.api2.get_guardian_app_data',
   params: { 
-    role: currentRole,
-    username: currentUser
+    guardian_id: currentUser
   },
   auto: false, // We'll call this manually
   onSuccess(data) {
-    console.log('Parent user details loaded:', data)
+    console.log('Guardian user details loaded:', data)
     globalError.value = null
     
     try {
-      if (data && data.user_details) {
+      if (data) {
         parent.value = {
-          name: data.user_details.name,
-          image: data.user_details.base64profile,
-          address: data.user_details.address
+          name: data.name,
+          img_url: data.img_url, // Direct image URL from backend
+          address: data.address
         }
 
-        if (data.user_details.student_list?.length) {
-          studentList.value = data.user_details.student_list
-          selectedStudent.value = data.user_details.student_list[0]
-          localStorage.setItem('selected_student', JSON.stringify(data.user_details.student_list[0]))
-          localStorage.setItem('selected_student_group', data.user_details.student_list[0]?.student_group || '')
+        if (data.student_list?.length) {
+          studentList.value = data.student_list
+          selectedStudent.value = data.student_list[0]
+          localStorage.setItem('selected_student', JSON.stringify(data.student_list[0]))
+          localStorage.setItem('selected_student_group', data.student_list[0]?.student_group || '')
         }
 
-        localStorage.setItem('user_details', JSON.stringify(data.user_details))
+        localStorage.setItem('user_details', JSON.stringify({
+          name: data.name,
+          img_url: data.img_url,
+          address: data.address,
+          student_list: data.student_list
+        }))
         hasInitialData.value = true
       } else {
         globalError.value = 'No user data received from server'
@@ -429,7 +461,7 @@ const userDetailsResource = createResource({
     }
   },
   onError(error) {
-    console.error('Error loading parent user details:', error)
+    console.error('Error loading guardian user details:', error)
     globalError.value = 'Failed to load user data. Please try again.'
     
     // If we don't have any data from localStorage, show error

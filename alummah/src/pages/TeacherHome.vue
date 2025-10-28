@@ -1,5 +1,23 @@
 <template>
   <div class="flex min-h-screen bg-gray-50 flex-col md:flex-row">
+    <!-- Full Screen Image Modal -->
+    <div v-if="showFullImage" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4" @click="showFullImage = false">
+      <div class="max-w-4xl max-h-full w-full h-full flex items-center justify-center">
+        <img
+          :src="fullImageUrl"
+          alt="Full size profile photo"
+          class="max-w-full max-h-full object-contain"
+          @click.stop
+        />
+        <button
+          @click="showFullImage = false"
+          class="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
+        >
+          <XMarkIcon class="w-8 h-8" />
+        </button>
+      </div>
+    </div>
+
     <!-- Error State -->
     <div v-if="globalError" class="fixed inset-0 bg-red-50 bg-opacity-90 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
@@ -40,10 +58,10 @@
       <!-- Mobile Header -->
       <header class="md:hidden bg-white shadow-sm border-b border-gray-200 p-4 flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+          <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 cursor-pointer" @click="openFullImage(teacher.img_url)">
             <img
-              v-if="teacher.image"
-              :src="`data:image/jpeg;base64,${teacher.image}`"
+              v-if="teacher.img_url"
+              :src="teacher.img_url"
               alt="Teacher"
               class="object-cover w-full h-full"
               @error="handleImageError"
@@ -97,10 +115,10 @@
         <div class="flex-1 overflow-y-auto space-y-6 md:space-y-8">
           <!-- Teacher Info Card - Hidden on mobile since we have header -->
           <div class="hidden md:flex items-start space-x-4 border-b pb-4">
-            <div class="flex-shrink-0 w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
+            <div class="flex-shrink-0 w-16 h-16 rounded-full bg-gray-200 overflow-hidden cursor-pointer" @click="openFullImage(teacher.img_url)">
               <img
-                v-if="teacher.image"
-                :src="`data:image/jpeg;base64,${teacher.image}`"
+                v-if="teacher.img_url"
+                :src="teacher.img_url"
                 alt="Teacher"
                 class="object-cover w-full h-full"
                 @error="handleImageError"
@@ -223,9 +241,8 @@
               </button>
             </nav>
           </div>
-        </div>
 
-        <!-- Logout Button -->
+                          <!-- Logout Button -->
         <div class="pt-4 border-t border-gray-200 flex-shrink-0">
           <button
             class="w-full px-4 py-3 rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 flex items-center justify-center space-x-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
@@ -236,6 +253,10 @@
             <span>Logout</span>
           </button>
         </div>
+        </div>
+
+
+
       </aside>
 
       <!-- Main Content Area -->
@@ -368,6 +389,8 @@ const showSidebar = ref(false)
 const activeView = ref('dashboard')
 const globalError = ref(null)
 const hasInitialData = ref(false)
+const showFullImage = ref(false)
+const fullImageUrl = ref('')
 
 // Component mapping
 const componentMap = {
@@ -390,9 +413,16 @@ const setActiveView = (view) => {
   }
 }
 
+// Open full screen image
+const openFullImage = (imgUrl) => {
+  if (imgUrl) {
+    fullImageUrl.value = imgUrl
+    showFullImage.value = true
+  }
+}
+
 // Get current user and role
 const currentUser = session.user
-const currentRole = 'teacher'
 
 // Initialize with localStorage data first for better UX
 const initializeFromLocalStorage = () => {
@@ -404,7 +434,7 @@ const initializeFromLocalStorage = () => {
       const userDetails = JSON.parse(userDetailsData)
       teacher.value = {
         name: userDetails.name,
-        image: userDetails.base64profile,
+        img_url: userDetails.img_url, // Updated to use img_url
       }
       if (userDetails.student_groups?.length) {
         studentGroups.value = userDetails.student_groups
@@ -417,32 +447,35 @@ const initializeFromLocalStorage = () => {
   }
 }
 
-// Create resource for API call with better error handling
+// Create resource for API call - UPDATED to use instructor API
 const userDetailsResource = createResource({
-  url: 'school.al_ummah.api2.get_user_details',
+  url: 'school.al_ummah.api2.get_instructor_app_data',
   params: { 
-    role: currentRole,
-    username: currentUser
+    teacherID: currentUser
   },
   auto: false,
   onSuccess(data) {
-    console.log('User details loaded:', data)
+    console.log('Instructor details loaded:', data)
     globalError.value = null
     
     try {
-      if (data && data.user_details) {
+      if (data) {
         teacher.value = {
-          name: data.user_details.name,
-          image: data.user_details.base64profile,
+          name: data.name,
+          img_url: data.img_url, // Direct image URL from backend
         }
 
-        if (data.user_details.student_groups?.length) {
-          studentGroups.value = data.user_details.student_groups
-          selectedGroup.value = data.user_details.student_groups[0]
-          localStorage.setItem('selected_student_group', data.user_details.student_groups[0])
+        if (data.student_groups?.length) {
+          studentGroups.value = data.student_groups
+          selectedGroup.value = data.student_groups[0]
+          localStorage.setItem('selected_student_group', data.student_groups[0])
         }
 
-        localStorage.setItem('user_details', JSON.stringify(data.user_details))
+        localStorage.setItem('user_details', JSON.stringify({
+          name: data.name,
+          img_url: data.img_url,
+          student_groups: data.student_groups
+        }))
         hasInitialData.value = true
       } else {
         globalError.value = 'No user data received from server'
@@ -453,7 +486,7 @@ const userDetailsResource = createResource({
     }
   },
   onError(error) {
-    console.error('Error loading user details:', error)
+    console.error('Error loading instructor details:', error)
     globalError.value = 'Failed to load user data. Please try again.'
     
     // If we don't have any data from localStorage, show error

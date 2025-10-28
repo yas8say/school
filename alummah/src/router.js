@@ -7,6 +7,11 @@ const routes = [
         component: () => import("@/components/EditStudent.vue"),
     },
 	{
+        path: '/attendance-record',
+        name: 'AttendanceRecord',
+        component: () => import("@/components/AttendanceRecord.vue"),
+    },
+	{
 		path: "/",
 		name: "Home",
 		redirect: { name: "Login" }

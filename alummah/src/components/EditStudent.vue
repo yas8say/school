@@ -60,7 +60,7 @@
         </div>
       </div>
     </div>
-
+    
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-gray-800">
         Edit Student: {{ studentInfo.student_name || studentId }}
@@ -141,15 +141,15 @@
 
           <!-- Profile Image Component -->
           <div class="md:col-span-2 lg:col-span-3">
-<!-- Make sure the StudentProfileImage is receiving the routeImageUrl -->
-<StudentProfileImage
-  :student-id="studentId"
-  :current-image="routeImageUrl"
-  :student-name="studentInfo.student_name"
-  @image-updated="handleImageUpdated"
-  @success="msg => showSuccess(msg)"
-  @error="msg => showError(msg)"
-/>
+            <!-- Make sure the StudentProfileImage is receiving the routeImageUrl -->
+            <StudentProfileImage
+              :student-id="studentId"
+              :current-image="routeImageUrl"
+              :student-name="studentInfo.student_name"
+              @image-updated="handleImageUpdated"
+              @success="msg => showSuccess(msg)"
+              @error="msg => showError(msg)"
+            />
           </div>
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>

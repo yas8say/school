@@ -99,14 +99,31 @@ const forceLogout = async () => {
   
   loggingOut.value = true
   try {
-    // Redirect to Frappe's logout page with our Vue app's login URL as parameter
-    const vueLoginUrl = `${window.location.origin}/setup/account/login`
+    // Get current origin and remove any port
+    const currentOrigin = window.location.origin
+    const url = new URL(currentOrigin)
+    
+    // Remove port from origin (keep protocol and hostname only)
+    const cleanOrigin = `${url.protocol}//${url.hostname}`
+    
+    // Build the Vue app login URL without port
+    const vueLoginUrl = `${cleanOrigin}/setup/account/login`
+    
+    console.log('Logout redirect:', {
+      currentOrigin,
+      cleanOrigin, 
+      vueLoginUrl
+    })
+    
+    // Redirect to Frappe's logout page with cleaned Vue app login URL
     window.location.href = `/logout?redirect-to=${encodeURIComponent(vueLoginUrl)}`
     
   } catch (error) {
     console.error('Logout failed:', error)
-    // Fallback - redirect directly to login
-    window.location.href = '/setup/account/login'
+    // Fallback - redirect directly to login without port
+    const url = new URL(window.location.origin)
+    const cleanOrigin = `${url.protocol}//${url.hostname}`
+    window.location.href = `${cleanOrigin}/setup/account/login`
   } finally {
     loggingOut.value = false
     showPopup.value = false

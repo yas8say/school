@@ -1629,11 +1629,10 @@ def get_guardian_app_data(guardian_id):
         student["student_group"] = student_group
 
     profile = guardian_doc.image
-    base64image = convert_image_to_base64(profile) if profile else None
 
     response = {
         "name": guardian_doc.guardian_name,
-        "base64profile": base64image,
+        "img_url": profile,
         "student_list": student_list,
     }
 
@@ -1684,12 +1683,12 @@ def get_student_app_data(studentID):
             "active": 1
         })
 
-        # Profile image as base64
-        base64image = convert_image_to_base64(student.image) if student.image else None
+        # ✅ Use image URL directly instead of base64
+        img_url = student.image or None
 
         # Basic details
         response.update({
-            "base64profile": base64image,
+            "img_url": img_url,
             "name": studentDetails.student_name,
             "student": student.name,
             "student_name": studentDetails.student_name,
@@ -1699,13 +1698,13 @@ def get_student_app_data(studentID):
             "address": student.address_line_1,
         })
 
-        # Split class and section
+        # Split class and section (if formatted like "Class-Section")
         parts = student_group.split("-")
         if len(parts) == 2:
             response["class"] = parts[0]
             response["section"] = parts[1]
 
-        # Today's attendance
+        # ✅ Today's attendance
         date = today()
         StudentAttendance = frappe.qb.DocType("Student Attendance")
 
@@ -1723,7 +1722,7 @@ def get_student_app_data(studentID):
             today_attendance[0]["status"] if today_attendance else "No Record"
         )
 
-        # All attendance records
+        # ✅ All attendance records
         all_attendance = (
             frappe.qb.from_(StudentAttendance)
             .select(StudentAttendance.status)
@@ -1735,29 +1734,22 @@ def get_student_app_data(studentID):
 
         present_count = sum(1 for record in all_attendance if record["status"] == "Present")
         absent_count = sum(1 for record in all_attendance if record["status"] == "Absent")
+        leave_count = sum(1 for record in all_attendance if record["status"] == "Leave")
 
-        #  Count approved leaves from Student Leave Application
-        total_leaves = frappe.db.count(
-            "Student Leave Application",
-            filters={"student": student.name, "mark_as_present": "1"},
-        )
-
-        # Update response
+        # ✅ Update response
         response.update({
             "present_count": present_count,
             "absent_count": absent_count,
-            "leave_count": total_leaves,
+            "leave_count": leave_count,
         })
 
-    except frappe.exceptions.ValidationError as e:
-        frappe.log_error(message=str(e), title="Error in get_student_app_data")
-        response["error"] = f"Validation Error: {str(e)}"
-
     except Exception as e:
-        frappe.log_error(message=frappe.get_traceback(), title="Error in get_student_app_data")
+        frappe.db.rollback()
+        frappe.log_error(frappe.get_traceback(), "Error in get_student_app_data")
         response["error"] = f"An error occurred: {str(e)}"
 
     return response
+
 
 
 # @frappe.whitelist()
@@ -2096,14 +2088,11 @@ def get_instructor_app_data(teacherID):
 	)
 
     profile = instructor_doc.image
+    print(profile)
 
-    # Convert the profile image to base64 if available
-    base64image = convert_image_to_base64(profile) if profile else None
-    # print(base64image)
-    # Add teacher info to response
     response = {
         "name": instructor_doc.instructor_name,
-        "base64profile": base64image,
+        "img_url": profile,
         "student_groups": student_groups,
     }
     return response

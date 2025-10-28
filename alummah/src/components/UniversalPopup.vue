@@ -78,6 +78,33 @@ const popupType = ref('csrf') // 'csrf', 'info', or 'role'
 const popupTitle = ref('')
 const popupMessage = ref('')
 
+// Remove any port from URL
+function removePortFromUrl(url) {
+  if (!url) return url
+  
+  try {
+    const urlObj = new URL(url)
+    // Reconstruct URL without port
+    return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}${urlObj.search}${urlObj.hash}`
+  } catch (error) {
+    console.warn('Invalid URL for port removal:', url)
+    // Fallback: remove port using regex for common port patterns
+    return url.replace(/:\d+(\/|$)/, '$1')
+  }
+}
+
+// Get origin without port
+function getOriginWithoutPort() {
+  const currentOrigin = window.location.origin
+  try {
+    const urlObj = new URL(currentOrigin)
+    return `${urlObj.protocol}//${urlObj.hostname}`
+  } catch (error) {
+    // Fallback: remove port using regex
+    return currentOrigin.replace(/:\d+$/, '')
+  }
+}
+
 // Handle different types of popups
 const handlePopup = (event) => {
   const { type, title, message } = event.detail || {}
@@ -106,14 +133,26 @@ const forceLogout = async () => {
   
   loggingOut.value = true
   try {
-    // Redirect to Frappe's logout page with our Vue app's login URL as parameter
-    const vueLoginUrl = `${window.location.origin}/alummah/account/login`
+    // Get origin without any port
+    const cleanOrigin = getOriginWithoutPort()
+    
+    // Build Vue app login URL without port
+    const vueLoginUrl = `${cleanOrigin}/alummah/account/login`
+    
+    console.log('Logout redirect:', {
+      originalOrigin: window.location.origin,
+      cleanOrigin,
+      vueLoginUrl
+    })
+    
+    // Redirect to Frappe's logout page with cleaned Vue app login URL
     window.location.href = `/logout?redirect-to=${encodeURIComponent(vueLoginUrl)}`
     
   } catch (error) {
     console.error('Logout failed:', error)
-    // Fallback
-    window.location.href = '/alummah/account/login'
+    // Fallback - use cleaned origin
+    const cleanOrigin = getOriginWithoutPort()
+    window.location.href = `${cleanOrigin}/alummah/account/login`
   } finally {
     loggingOut.value = false
     showPopup.value = false
