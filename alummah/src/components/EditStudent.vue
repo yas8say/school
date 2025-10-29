@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 p-4">
     <!-- Alert Notifications -->
-    <div class="fixed top-4 right-4 z-50 space-y-2 w-96 max-w-full">
+    <div class="fixed top-4 right-4 z-50 space-y-2 w-full max-w-sm px-4 sm:px-0 sm:w-96">
       <!-- Success Alert -->
       <div 
         v-if="successMessage" 
@@ -62,11 +62,11 @@
     </div>
     
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-800">
         Edit Student: {{ studentInfo.student_name || studentId }}
-        <span class="text-sm text-gray-500 font-normal ml-2">(ID: {{ studentId }})</span>
+        <span class="text-xs sm:text-sm text-gray-500 font-normal ml-2">(ID: {{ studentId }})</span>
       </h1>
-      <p class="text-gray-600" v-if="!settingsLoading">
+      <p class="text-gray-600 text-sm sm:text-base" v-if="!settingsLoading">
         <span v-if="allowInstructorsModify" class="text-green-600 font-medium">
           ✓ Full editing access enabled
         </span>
@@ -107,7 +107,7 @@
     </div>
 
     <!-- Edit Form -->
-    <div v-else class="bg-white rounded-lg shadow-sm p-6">
+    <div v-else class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <form @submit.prevent="updateStudent">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <!-- Student ID (always readonly) -->
@@ -244,8 +244,8 @@
         </div>
 
         <!-- Form Actions -->
-        <div class="mt-8 pt-6 border-t flex justify-between items-center">
-          <div class="flex space-x-3">
+        <div class="mt-8 pt-6 border-t flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+          <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
             <button 
               type="button" 
               class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
@@ -276,7 +276,7 @@
         <div class="md:col-span-2 lg:col-span-3">
           <div 
             :class="[
-              'bg-gray-50 rounded-lg p-6 border-2 border-dashed mb-6 transition-all',
+              'bg-gray-50 rounded-lg p-4 sm:p-6 border-2 border-dashed mb-6 transition-all',
               isGuardianLimitReached ? 'border-gray-300 opacity-50' : 'border-blue-200 hover:border-blue-300'
             ]"
           >
@@ -334,7 +334,7 @@
               </div>
             </div>
 
-            <div class="mt-4 flex items-center justify-between">
+            <div class="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
               <div>
                 <p v-if="isGuardianLimitReached" class="text-red-600 text-sm font-medium">
                   ❌ Maximum of 3 guardians reached
@@ -348,7 +348,7 @@
                 @click="addGuardian"
                 :disabled="isGuardianLimitReached || addingGuardian"
                 :class="[
-                  'px-4 py-2 rounded-md flex items-center space-x-2 transition-colors',
+                  'px-4 py-2 rounded-md flex items-center space-x-2 transition-colors w-full sm:w-auto justify-center',
                   isGuardianLimitReached || addingGuardian
                     ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -363,7 +363,7 @@
 
         <!-- Existing Guardians Section -->
         <div class="md:col-span-2 lg:col-span-3">
-          <div class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
             <h4 class="text-lg font-semibold text-gray-800 mb-4">Existing Guardians</h4>
             
             <div v-if="studentDetailsResource.loading" class="flex justify-center py-4">
@@ -386,44 +386,51 @@
               >
                 <div class="flex items-start justify-between">
                   <div class="flex items-start space-x-3 flex-1">
-                    <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
                       <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                     
                     <div class="flex-1 min-w-0">
-                      <div class="flex items-center space-x-2 mb-1">
-                        <h5 class="font-medium text-gray-800 text-lg">{{ guardian.guardian_name }}</h5>
-                        <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                      <div class="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2 mb-1">
+                        <h5 class="font-medium text-gray-800 text-lg truncate">{{ guardian.guardian_name }}</h5>
+                        <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full self-start sm:self-auto">
                           {{ guardian.relation }}
                         </span>
                       </div>
                       
                       <!-- Guardian Details Display -->
                       <div v-if="editingGuardianId !== guardian.guardian" class="space-y-2 text-sm text-gray-600">
-                        <div class="flex items-center space-x-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
                           <span class="flex items-center space-x-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                             </svg>
-                            <span>{{ guardian.mobile_number || 'No phone' }}</span>
+                            <span class="truncate">{{ guardian.mobile_number || 'No phone' }}</span>
                           </span>
-                          <span class="text-gray-400">•</span>
+                          <span class="hidden sm:inline text-gray-400">•</span>
                           <span class="flex items-center space-x-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                             </svg>
-                            <span>{{ guardian.email || 'No email' }}</span>
+                            <span class="truncate">{{ guardian.email || 'No email' }}</span>
                           </span>
                         </div>
-                        <div v-if="guardian.occupation || guardian.designation" class="flex items-center space-x-2 text-xs">
-                          <span v-if="guardian.occupation">💼 {{ guardian.occupation }}</span>
-                          <span v-if="guardian.designation" class="text-gray-400">•</span>
-                          <span v-if="guardian.designation">🎯 {{ guardian.designation }}</span>
+                        <div v-if="guardian.occupation || guardian.designation" class="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2 text-xs">
+                          <span v-if="guardian.occupation" class="flex items-center space-x-1">
+                            <span>💼</span>
+                            <span class="truncate">{{ guardian.occupation }}</span>
+                          </span>
+                          <span v-if="guardian.occupation && guardian.designation" class="hidden sm:inline text-gray-400">•</span>
+                          <span v-if="guardian.designation" class="flex items-center space-x-1">
+                            <span>🎯</span>
+                            <span class="truncate">{{ guardian.designation }}</span>
+                          </span>
                         </div>
-                        <div v-if="guardian.education" class="text-xs text-gray-500">
-                          🎓 {{ guardian.education }}
+                        <div v-if="guardian.education" class="text-xs text-gray-500 flex items-center space-x-1">
+                          <span>🎓</span>
+                          <span class="truncate">{{ guardian.education }}</span>
                         </div>
                       </div>
 
@@ -515,12 +522,12 @@
                           </div>
                         </div>
 
-                        <div class="flex space-x-3 pt-4">
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-4">
                           <button
                             type="button"
                             @click="updateGuardianDetails(guardian.guardian)"
                             :disabled="updatingGuardian"
-                            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300 flex items-center space-x-2"
+                            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300 flex items-center space-x-2 justify-center"
                           >
                             <svg v-if="updatingGuardian" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -543,7 +550,7 @@
                     type="button"
                     v-if="editingGuardianId !== guardian.guardian"
                     @click="startEdit(guardian)"
-                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
                     title="Edit guardian details"
                   >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -556,7 +563,7 @@
           </div>
         </div>
         
-        <div class="text-sm text-gray-600">
+        <div class="text-sm text-gray-600 mt-4">
           <span v-if="allowInstructorsModify" class="text-green-600">
             ✓ You have full editing permissions
           </span>
@@ -1051,5 +1058,12 @@ onMounted(() => {
     transform: translateX(100%);
     opacity: 0;
   }
+}
+
+/* Responsive text truncation */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
