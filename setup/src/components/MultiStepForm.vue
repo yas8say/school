@@ -39,6 +39,7 @@
         @auto-create-terms="autoCreateTerms"
         @auto-create-classes="autoCreateClasses" 
         @use-previous-data="usePreviousData"
+        @grading-completed="handleGradingCompleted"
         class="mb-6"
       />
 
@@ -114,14 +115,17 @@ import AcademicYearTerms from './AcademicYearTerms.vue';
 import UsePreviousData from './UsePreviousData.vue';
 import ProgramSelection from './ProgramSelection.vue';
 import SubjectsDivisions from './SubjectsDivisions.vue';
+import GradingSystem from './GradingSystem.vue';
 
 export default {
+  name: 'MultiStepForm',
   components: {
     EmailAccountSetup,
     AcademicYearTerms,
     UsePreviousData,
     ProgramSelection,
-    SubjectsDivisions
+    SubjectsDivisions,
+    GradingSystem
   },
   setup() {
     // Reactive state
@@ -148,12 +152,20 @@ export default {
       divisions: [],
       commonSubjects: [],
       commonDivisions: [],
-      dontCreateClasses: false
+      dontCreateClasses: false,
+      gradingSystem: {
+        selectedOption: '', // 'previous' or 'manual'
+        scaleName: '',
+        previousScaleName: '',
+        gradeData: null // Will be array for manual, null for previous
+      },
+      gradingCompleted: false
     });
 
     const steps = ref([
       { title: 'Email Account Setup (Optional)', component: 'EmailAccountSetup' },
       { title: 'Academic Year & Terms', component: 'AcademicYearTerms' },
+      { title: 'Grading System (Optional)', component: 'GradingSystem' }, // Made optional again
       { title: 'Use Previous Data', component: 'UsePreviousData' },
       { title: 'Select Institution Type & Classes', component: 'ProgramSelection' },
       { title: 'Subjects and Divisions', component: 'SubjectsDivisions' }
@@ -211,6 +223,12 @@ export default {
     });
 
     // Methods
+    function handleGradingCompleted() {
+      // Mark grading as completed and move to next step
+      formValues.gradingCompleted = true;
+      nextStep();
+    }
+    
     function autoCreateClasses({ classNames }) {
       const currentClasses = [...formValues.classes];
       const maxIndex = currentClasses.reduce(
@@ -232,8 +250,12 @@ export default {
       previousDataResource.reload();
     }
 
-    function updateField({ field, value }) {
-      formValues[field] = value;
+    function updateField({ field, value, parent = null }) {
+      if (parent && formValues[parent]) {
+        formValues[parent][field] = value;
+      } else {
+        formValues[field] = value;
+      }
     }
 
     function updateFieldArray({ field, index, subField, value }) {
@@ -349,7 +371,8 @@ export default {
       errorMessage.value = '';
       showMissingFields.value = false;
 
-      const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes'];
+      // Grading system is optional, so remove it from exceptions check
+      const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes', 'gradingSystem', 'gradingCompleted'];
       const missing = checkMissingFields(formValues, exceptions);
 
       if (missing.length > 0) {
@@ -357,7 +380,6 @@ export default {
         showMissingFields.value = true;
         isSubmitting.value = false;
         
-        // Scroll to top to show the alert
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -378,11 +400,9 @@ export default {
 
         if (Array.isArray(value)) {
           if (value.length === 0) {
-            // Format the field name for better display
             const formattedField = formatFieldName(key);
             missingFields.push(`${formattedField} list is empty`);
           } else {
-            // Check individual array items for required fields
             value.forEach((item, index) => {
               if (typeof item === 'object' && item !== null) {
                 Object.entries(item).forEach(([subKey, subValue]) => {
@@ -405,7 +425,6 @@ export default {
     }
 
     function formatFieldName(fieldName) {
-      // Convert camelCase to Title Case with spaces
       return fieldName
         .replace(/([A-Z])/g, ' $1')
         .replace(/^./, str => str.toUpperCase())
@@ -437,6 +456,7 @@ export default {
       submitEmailAccount,
       autoCreateTerms,
       usePreviousData,
+      handleGradingCompleted,
       nextStep,
       prevStep,
       submitForm,

@@ -14,9 +14,31 @@ from frappe.auth import get_logged_user
 
 #qdsr itqf nmqx zmni
 
+@frappe.whitelist()
+def fetch_grading_scales():
+    """
+    Fetch list of all Grading Scale names.
+    """
 
-import frappe
-from frappe import _
+    try:
+        scales = frappe.get_all(
+            "Grading Scale",
+            fields=["name"],
+            order_by="name asc"
+        )
+
+        # Extract just names → ["CBSE Scale", "IGCSE Scale", ...]
+        scale_names = [s["name"] for s in scales]
+
+        return {
+            "success": True,
+            "grading_scales": scale_names,
+            "count": len(scale_names)
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Fetch Grading Scales Error")
+        return {"success": False, "message": str(e)}
 
 @frappe.whitelist()
 def fetch_admin_settings():
@@ -147,7 +169,8 @@ def save_previous_class_structure(values):
     except Exception as e:
         # Log any errors but don't stop the execution
         frappe.log_error(f"Error saving Previous Class Structure: {str(e)}", "Quick Setup Error")
-        
+
+
 @frappe.whitelist()
 def quick_setup(values):
     if "Administrator" not in frappe.get_roles(frappe.session.user):
@@ -183,6 +206,87 @@ def quick_setup(values):
         frappe.log_error(f"Error in quick setup: {str(e)}", "Quick Setup Error")
         return {"status": "failed", "message": f"Error in quick setup: {str(e)}"}
 
+@frappe.whitelist()
+def save_assessment_structure(payload):
+    try:
+        structure = payload.get("assessmentStructure", {})
+        root_groups = structure.get("assessmentGroups", [])
+
+        if not root_groups:
+            return {"status": "failed", "message": "No assessment groups provided."}
+
+        # ✅ Ensure master root exists
+        ROOT = "All Assessment Groups"
+        if not frappe.db.exists("Assessment Group", ROOT):
+            frappe.get_doc({
+                "doctype": "Assessment Group",
+                "assessment_group": ROOT,
+                "is_group": 1
+            }).insert(ignore_permissions=True)
+
+        for parent in root_groups:
+
+            parent_name = parent.get("assessmentGroupParentName")
+            child_groups = parent.get("assessmentGroups", [])
+
+            if not parent_name:
+                continue
+
+            # ✅ Parent group (forced under "All Assessment Groups")
+            if not frappe.db.exists("Assessment Group", parent_name):
+                frappe.get_doc({
+                    "doctype": "Assessment Group",
+                    "assessment_group_name": parent_name,
+                    "is_group": 1,
+                    "parent_assessment_group": ROOT
+                }).insert(ignore_permissions=True)
+
+            # ✅ Process child groups
+            for child in child_groups:
+                group_name = child.get("assessmentGroup")
+                criteria_list = child.get("assessmentCriteria", [])
+
+                if not group_name:
+                    continue
+
+                # ✅ Child group (linked to parent)
+                if not frappe.db.exists("Assessment Group", group_name):
+                    frappe.get_doc({
+                        "doctype": "Assessment Group",
+                        "assessment_group_name": group_name,
+                        "is_group": 0,
+                        "parent_assessment_group": parent_name
+                    }).insert(ignore_permissions=True)
+
+                # ✅ Create assessment criteria
+                for crit in criteria_list:
+                    crit_name = crit.get("assessmentCriteria")
+
+                    if not crit_name:
+                        continue
+
+                    # Skip duplicates
+                    if frappe.db.exists(
+                        "Assessment Criteria",
+                        {
+                            "assessment_criteria": crit_name,
+                            "assessment_criteria_group": group_name
+                        }
+                    ):
+                        continue
+
+                    frappe.get_doc({
+                        "doctype": "Assessment Criteria",
+                        "assessment_criteria": crit_name,
+                        "assessment_criteria_group": group_name
+                    }).insert(ignore_permissions=True)
+
+        frappe.db.commit()
+        return {"status": "success"}
+
+    except Exception as e:
+        frappe.log_error(f"save_assessment_structure error: {str(e)}", "Assessment Structure Error")
+        return {"status": "failed", "message": str(e)}
 
 @frappe.whitelist()
 def create_program_and_groups_with_courses(values):
@@ -190,6 +294,10 @@ def create_program_and_groups_with_courses(values):
         frappe.throw("You are not authorized to perform this action.")
 
     try:
+        # Resolve grading scale based on 3 scenarios
+        grading_system = values.get("gradingSystem")
+        resolved_grading_scale = resolve_grading_scale(grading_system)
+
         classes = values.get("classes")
         academic_year_name = values.get("academicYear")
         dont_create_classes = values.get("dontCreateClasses", False)
@@ -202,67 +310,63 @@ def create_program_and_groups_with_courses(values):
             program_exists = frappe.db.exists("Program", {"program_name": class_name})
             program_doc = None
 
-            # ✅ Create program only if needed
+            # Create program only if not skipping
             if not dont_create_classes and not program_exists:
                 program_doc = frappe.new_doc("Program")
                 program_doc.program_name = class_name
 
                 if not class_subjects:
-                    frappe.log_error(f"No subjects for class {class_name}. Skipping program creation.", "Program Creation Error")
+                    frappe.log_error(
+                        f"No subjects for class {class_name}. Skipping program creation.",
+                        "Program Creation Error"
+                    )
                     continue
 
                 for subject in class_subjects:
                     subject_name = f"{subject} ({class_name})"
 
-                    # ✅ Skip course creation if it already exists
+                    # Create course with default grading scale attached
                     if not frappe.db.exists("Course", {"course_name": subject_name}):
                         course_doc = frappe.new_doc("Course")
                         course_doc.course_name = subject_name
+                        course_doc.default_grading_scale = resolved_grading_scale
                         course_doc.save(ignore_permissions=True)
-                        frappe.db.commit()
 
-                    # ✅ Add course to program if creating the program
                     program_course = program_doc.append("courses", {})
                     program_course.course = subject_name
                     program_course.course_name = subject
 
                 program_doc.save(ignore_permissions=True)
-                frappe.db.commit()
 
-            # ✅ Always ensure courses exist even if program already exists
+            # Ensure course exists even when program exists
             for subject in class_subjects:
                 subject_name = f"{subject} ({class_name})"
+
                 if not frappe.db.exists("Course", {"course_name": subject_name}):
                     course_doc = frappe.new_doc("Course")
                     course_doc.course_name = subject_name
+                    course_doc.default_grading_scale = resolved_grading_scale
                     course_doc.save(ignore_permissions=True)
-                    frappe.db.commit()
 
-            # ✅ Always create divisions/groups
+            # Create batch + student groups
             for division_info in divisions:
                 division_name = division_info.get("divisionName")
                 student_group_name = f"{division_name} ({academic_year_name})"
 
-                # Create batch if not exists
                 if not frappe.db.exists("Student Batch Name", {"batch_name": student_group_name}):
                     batch_doc = frappe.new_doc("Student Batch Name")
                     batch_doc.batch_name = student_group_name
                     batch_doc.save(ignore_permissions=True)
 
-                # Skip if student group already exists
-                if frappe.db.exists("Student Group", {"student_group_name": student_group_name}):
-                    continue
+                if not frappe.db.exists("Student Group", {"student_group_name": student_group_name}):
+                    student_group_doc = frappe.new_doc("Student Group")
+                    student_group_doc.student_group_name = student_group_name
+                    student_group_doc.program = class_name
+                    student_group_doc.group_based_on = "Batch"
+                    student_group_doc.academic_year = academic_year_name
+                    student_group_doc.batch = student_group_name
+                    student_group_doc.save(ignore_permissions=True)
 
-                # Create student group
-                student_group_doc = frappe.new_doc("Student Group")
-                student_group_doc.student_group_name = student_group_name
-                student_group_doc.program = class_name
-                student_group_doc.group_based_on = "Batch"
-                student_group_doc.academic_year = academic_year_name
-                student_group_doc.batch = student_group_name
-                student_group_doc.save(ignore_permissions=True)
-
-        # ✅ Final commit and response
         frappe.db.commit()
         return {"status": "success", "message": "Programs and Student Groups created successfully."}
 
@@ -270,6 +374,71 @@ def create_program_and_groups_with_courses(values):
         frappe.log_error(f"Error in create_program_and_groups_with_courses: {str(e)}", "Setup Error")
         return {"status": "failed", "message": f"An error occurred: {str(e)}"}
 
+def resolve_grading_scale(grading_system):
+    """
+    Handle 3 scenarios:
+    1. previous → return existing scale name
+    2. manual → create scale + intervals, submit doc, return new name
+    3. skip → return None
+    """
+
+    if not grading_system:
+        return None
+
+    option = grading_system.get("selectedOption")
+
+    # CASE 1: Skip grading
+    if not option:
+        return None
+
+    # CASE 2: Use previous grading scale
+    if option == "previous":
+        previous = grading_system.get("previousScaleName")
+        if previous and frappe.db.exists("Grading Scale", previous):
+            return previous
+        else:
+            frappe.throw("Selected previous grading scale does not exist.")
+
+    # CASE 3: Manual grading scale creation
+    if option == "manual":
+        scale_name = grading_system.get("scaleName")
+        grade_data = grading_system.get("gradeData")
+
+        if not scale_name:
+            frappe.throw("Scale name is required for manual grading scale.")
+
+        if not grade_data:
+            frappe.throw("Grade data is required for manual grading scale.")
+
+        # Create new grading scale
+        scale_doc = frappe.new_doc("Grading Scale")
+        scale_doc.grading_scale_name = scale_name
+
+        # Add intervals (child table)
+        for row in grade_data:
+            scale_doc.append("intervals", {
+                "grade_code": row["grade_code"],
+                "threshold": float(row["threshold"]),
+                "description": row.get("description", "")
+            })
+
+        # Save it
+        scale_doc.save(ignore_permissions=True)
+
+        # Submit ONLY IF doctype is submittable
+        try:
+            if getattr(scale_doc.meta, "is_submittable", 0):
+                scale_doc.submit()
+        except Exception as submit_err:
+            frappe.log_error(
+                f"Failed to submit grading scale {scale_name}: {submit_err}",
+                "Grading Scale Submit Error"
+            )
+
+        return scale_name
+
+    # Unknown case
+    return None
 
 
 @frappe.whitelist()
@@ -627,6 +796,8 @@ def enroll_student(student, className, divisionName, year, term):
     user.enabled = 1
     user.user_type = "Website User"
     user.save(ignore_permissions=True)
+    for role in ["Student", "Academics User"]:
+        user.append("roles", {"role": role})
 
     # --- Create Student ---
     student_doc = frappe.new_doc("Student")
