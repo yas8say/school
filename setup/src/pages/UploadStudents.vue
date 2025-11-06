@@ -113,6 +113,23 @@
               {{ fileSelected ? 'Change File' : 'Upload File 📤' }}
             </span>
           </button>
+          
+          <!-- Add this section in the File Upload Section, before the Enroll Students button -->
+        <div class="form-section">
+          <h3 class="section-title">Additional Options</h3>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input
+                v-model="generateQRCode"
+                type="checkbox"
+                class="checkbox"
+              >
+              <span class="checkmark"></span>
+              Generate QR Code for Students
+            </label>
+            <p class="checkbox-description">Check this to generate QR codes for all enrolled students</p>
+          </div>
+        </div>
 
           <!-- Enroll Students Button -->
           <div class="enroll-button-section">
@@ -318,6 +335,8 @@ import {
 export default {
   setup() {
     // Reactive state
+    // Add this with other reactive state variables
+    const generateQRCode = ref(false);
     const showErrorStudentsList = ref(false);
     const academicYears = ref([]);
     const displayYears = computed(() =>
@@ -341,6 +360,7 @@ export default {
       "Email Address", 
       "Phone Number", 
       "GR Number", 
+      "Aadhar Number",
       "Roll No",
       "Guardian Name",
       "Guardian Number", 
@@ -697,6 +717,7 @@ export default {
         "Phone Number": "",
         "GR Number": "",
         "Roll No": "",
+        "Aadhar Number": "", // Add this line
         "Guardian Name": "",
         "Guardian Number": "",
         "Relation": "",
@@ -903,11 +924,12 @@ export default {
           return student;
         });
 
-        // Perform bulk enrollment
+        // Perform bulk enrollment with QR code flag
         await enrollStudentsResource.submit({
           academicYear: selectedYear.value,
           className: selectedClass.value,
           divisionName: selectedDivision.value,
+          generate_qr_code: generateQRCode.value, // Add this line
           students: studentsData,
           mappings: Object.fromEntries(
             mappings.value
@@ -933,6 +955,7 @@ export default {
         "Phone Number": ["phone", "mobile", "contact"],
         "GR Number": ["gr", "grno", "gr_num", "gr no"],
         "Roll No": ["r. no", "roll", "rollno", "roll_num"],
+        "Aadhar Number": ["aadhar", "aadhaar", "uid", "aadhar no", "aadhaar no"], // Add this line
         "Student Date of Birth": ["dob", "birth", "birthdate", "date of birth"],
         "Guardian Date of Birth": ["guardian dob", "parent dob", "father dob", "mother dob"],
         "Guardian Name": ["guardian name", "parent", "father", "mother"],
@@ -1175,7 +1198,8 @@ export default {
       markRowAsTouched,
       getRowStatusClass,
       validDate,
-      getTodayDate
+      getTodayDate,
+      generateQRCode,
     };
   }
 };

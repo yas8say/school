@@ -34,3 +34,5 @@ def register_and_create_site(email, password):
 
     # 6. Return New Site URL
     return {"status": "success", "site_url": f"https://{site_name}"}
+
+

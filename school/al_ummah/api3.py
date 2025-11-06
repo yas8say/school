@@ -199,12 +199,142 @@ def quick_setup(values):
         
         # Commit changes to the database
         create_program_and_groups_with_courses(values)
-
+        
+        # NEW: Create Fee Structures and Fee Categories
+        create_fee_structures_and_categories(values)
+        
         frappe.db.commit()
             
     except Exception as e:
         frappe.log_error(f"Error in quick setup: {str(e)}", "Quick Setup Error")
         return {"status": "failed", "message": f"Error in quick setup: {str(e)}"}
+
+def create_fee_structures_and_categories(values):
+    """
+    Create Fee Structures and Fee Categories for all programs without duplicates
+    """
+    try:
+        fee_structures_data = values.get("feeStructures", [])
+        classes = values.get("classes", [])
+        academic_year = values.get("academicYear")
+        
+        if not fee_structures_data or not classes:
+            print("No fee structures data or classes found")
+            return
+        
+        print(f"Creating fee structures for {len(classes)} classes...")
+        
+        for i, cls in enumerate(classes):
+            program_name = cls.get("className")
+            fee_components = fee_structures_data[i].get("components", []) if i < len(fee_structures_data) else []
+            
+            if not program_name or not fee_components:
+                print(f"Skipping fee structure for {program_name} - no components")
+                continue
+            
+            # Create or get Fee Structure
+            fee_structure_name = create_fee_structure(program_name, academic_year, fee_components)
+            
+            if fee_structure_name:
+                print(f"✅ Created/Updated Fee Structure: {fee_structure_name}")
+            else:
+                print(f"❌ Failed to create fee structure for {program_name}")
+        
+        print("✅ Fee structure creation completed")
+        
+    except Exception as e:
+        print(f"❌ Error in create_fee_structures_and_categories: {str(e)}")
+        frappe.log_error(f"Error creating fee structures: {str(e)}", "Fee Structure Creation Error")
+        raise
+
+def create_fee_structure(program_name, academic_year, fee_components):
+    """
+    Create or update a Fee Structure for a program
+    """
+    try:
+        # Generate fee structure name
+        fee_structure_name = f"{program_name} - {academic_year}"
+        
+        # Check if fee structure already exists
+        if frappe.db.exists("Fee Structure", fee_structure_name):
+            print(f"⚠️ Fee Structure {fee_structure_name} already exists, updating...")
+            fee_structure = frappe.get_doc("Fee Structure", fee_structure_name)
+        else:
+            # Create new Fee Structure
+            fee_structure = frappe.new_doc("Fee Structure")
+            fee_structure.program = program_name
+            fee_structure.academic_year = academic_year
+            fee_structure.fee_structure_name = fee_structure_name
+        
+        # Calculate total amount
+        total_amount = sum(comp.get("amount", 0) for comp in fee_components)
+        
+        # Update basic fields
+        fee_structure.total_amount = total_amount
+        fee_structure.is_active = 1
+        
+        # Clear existing components
+        fee_structure.set("components", [])
+        
+        # Add fee components
+        for comp in fee_components:
+            # First ensure fee category exists
+            fee_category_name = comp.get("fees_category")
+            if fee_category_name:
+                create_fee_category(fee_category_name)
+            
+            # Add component to fee structure
+            fee_structure.append("components", {
+                "fees_category": fee_category_name,
+                "amount": comp.get("amount", 0),
+                "discount": comp.get("discount", 0),
+                "total": comp.get("total", comp.get("amount", 0))
+            })
+        
+        # Save and submit
+        fee_structure.save()
+        
+        if fee_structure.docstatus == 0:  # Only submit if not already submitted
+            fee_structure.submit()
+        
+        return fee_structure.name
+        
+    except Exception as e:
+        print(f"❌ Error creating fee structure for {program_name}: {str(e)}")
+        frappe.log_error(f"Error creating fee structure {program_name}: {str(e)}")
+        return None
+
+def create_fee_category(category_name):
+    """
+    Create Fee Category if it doesn't exist
+    """
+    try:
+        if not category_name:
+            return None
+        
+        # Clean category name
+        clean_name = category_name.strip()
+        
+        # Check if fee category already exists
+        if frappe.db.exists("Fee Category", clean_name):
+            return clean_name
+        
+        # Create new Fee Category
+        fee_category = frappe.new_doc("Fee Category")
+        fee_category.fee_category_name = clean_name
+        fee_category.category_name = clean_name
+        fee_category.description = f"Fee category for {clean_name}"
+        fee_category.is_active = 1
+        
+        fee_category.insert(ignore_permissions=True)
+        
+        print(f"✅ Created Fee Category: {clean_name}")
+        return fee_category.name
+        
+    except Exception as e:
+        print(f"❌ Error creating fee category {category_name}: {str(e)}")
+        # Don't raise error for category creation - it might already exist
+        return None
 
 @frappe.whitelist()
 def save_assessment_structure(payload):
@@ -669,8 +799,9 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
 
         
 @frappe.whitelist()
-def bulk_enroll_students(className, divisionName, students):
+def bulk_enroll_students(className, divisionName, generateQRCode, students):
     print(f"Received {len(students)} students")
+    print(generateQRCode)
 
     # --- Security check ---
     if "Administrator" not in frappe.get_roles(frappe.session.user):
@@ -716,7 +847,7 @@ def bulk_enroll_students(className, divisionName, students):
             print(f">>> Enrolling student: {full_name} | Roll No: {student.get('Roll No')}")
 
             # Enroll student
-            enroll_student(student, className, divisionName, year, term)
+            enroll_student(student, className, divisionName, year, term, generateQRCode)
 
             # Get enrolled student ID
             student_id = frappe.db.get_value("Student", {"gr_number": student.get("GR Number")}, "name")
@@ -749,7 +880,7 @@ def bulk_enroll_students(className, divisionName, students):
 
 
 @frappe.whitelist()
-def enroll_student(student, className, divisionName, year, term):
+def enroll_student(student, className, divisionName, year, term, generateQRCode):
     first_name = student["First Name"]
     middle_name = student.get("Middle Name", "")
     last_name = student["Last Name"]
@@ -808,7 +939,42 @@ def enroll_student(student, className, divisionName, year, term):
     student_doc.user = email
     student_doc.student_mobile_number = phone
     student_doc.gr_number = student["GR Number"]
+    student_doc.aadhar_number = student["Aadhar Number"]
     student_doc.save(ignore_permissions=True)
+    # ✅ Generate QR Code if enabled
+    if generateQRCode:
+        import qrcode
+        import base64
+        from io import BytesIO
+
+        # ✅ Data to encode inside QR
+        qr_data = f"{student_doc.name} - {student_doc.student_name}"
+
+        # ✅ Create QR image
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+
+        img = qr.make_image()
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        image_data = buffer.getvalue()
+
+        # ✅ Create File doc for QR code
+        file_doc = frappe.get_doc({
+            "doctype": "File",
+            "file_name": f"{student_doc.name}_qr.png",
+            "content": image_data,
+            "attached_to_doctype": "Student",
+            "attached_to_name": student_doc.name,
+            "is_private": 0
+        })
+
+        file_doc.insert(ignore_permissions=True)
+
+        # ✅ Attach URL to Student.qr_code
+        student_doc.qr_code = file_doc.file_url
+        student_doc.save(ignore_permissions=True)
 
     # --- Create Program Enrollment ---
     program_enrollment = frappe.new_doc("Program Enrollment")
@@ -831,7 +997,7 @@ def enroll_student(student, className, divisionName, year, term):
 
 
 @frappe.whitelist()
-def enroll_single_student(student_data, className, divisionName):
+def enroll_single_student(student_data, className, divisionName, generateQRCode):
     # print(student_data, className, divisionName)
 
     # --- Permission check ---
@@ -849,7 +1015,7 @@ def enroll_single_student(student_data, className, divisionName):
 
     try:
         # --- Enroll the student ---
-        enroll_student(student_data, className, divisionName, year, term)
+        enroll_student(student_data, className, divisionName, year, term, generateQRCode)
 
         # --- Get the Student doc name after enrollment ---
         student_id = frappe.db.get_value(

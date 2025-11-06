@@ -197,6 +197,17 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { session } from '../data/session'
 
+const FeeScheduleIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+  </svg>`
+}
+
+const FeePaymentIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+}
+
 // Icons (you can replace these with your actual icon components)
 const QuickSetupIcon = {
   template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`
@@ -227,6 +238,20 @@ const showSidebar = ref(false)
 
 // Navigation configuration
 const navigation = [
+  {
+    to: '/home/fee-payments',
+    label: 'Fee Payments',
+    icon: FeePaymentIcon,
+    activeClasses: 'bg-green-500 text-white shadow-lg shadow-green-200',
+    inactiveClasses: 'bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 hover:shadow-md'
+  },
+  {
+    to: '/home/fee-schedule',
+    label: 'Fee Schedule',
+    icon: FeeScheduleIcon,
+    activeClasses: 'bg-purple-500 text-white shadow-lg shadow-purple-200',
+    inactiveClasses: 'bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-800 hover:shadow-md'
+  },
   {
     to: '/home/quick-setup',
     label: 'Quick Setup',
@@ -273,6 +298,8 @@ const navigation = [
 
 // Mobile navigation (simplified for bottom bar)
 const mobileNavigation = [
+  { to: '/home/fee-schedule', label: 'Fee Schedule', icon: FeeScheduleIcon },
+  { to: '/home/fee-payments', label: 'Payments', icon: FeePaymentIcon },
   { to: '/home/quick-setup', label: 'Setup', icon: QuickSetupIcon },
   { to: '/home/upload-students', label: 'Upload', icon: UploadIcon },
   { to: '/home/add-student', label: 'Add', icon: AddUserIcon },
@@ -290,6 +317,8 @@ const adminImage = computed(() => {
 // Current page title for display
 const currentPageTitle = computed(() => {
   const path = route.path
+  if (path.includes('fee-schedule')) return 'Fee Schedule'
+  if (path.includes('fee-payments')) return 'Fee Payments'
   if (path.includes('quick-setup')) return 'Quick Setup'
   if (path.includes('upload-students')) return 'Upload Students'
   if (path.includes('add-student')) return 'Add Student'

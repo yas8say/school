@@ -12,6 +12,7 @@
     "bootstrap-vue": "^2.23.1",
     "feather-icons": "^4.29.2",
     "frappe-ui": "^0.1.72",
+    "html5-qrcode": "^2.3.8",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
     "lucide-vue-next": "^0.507.0",

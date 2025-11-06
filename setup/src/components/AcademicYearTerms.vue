@@ -10,12 +10,12 @@
     <div class="form-grid">
       <!-- Academic Year Row -->
       <div class="form-row">
-        <div class="form-group full-width">
+        <div class="form-group full-width required">
           <label class="form-label">Academic Year</label>
           <input 
             type="text" 
             v-model="academicYear" 
-            class="form-input"
+            class="input"
             placeholder="e.g., 2023-2024"
             @input="updateField('academicYear', $event.target.value)"
           />
@@ -24,22 +24,22 @@
 
       <!-- Date Range Row -->
       <div class="form-row date-range-row">
-        <div class="form-group">
+        <div class="form-group required">
           <label class="form-label">Start Date</label>
           <input 
             type="date" 
             v-model="academicYearStart"
-            class="form-input"
+            class="input"
             @input="updateField('academicYearStart', $event.target.value)"
           />
         </div>
         
-        <div class="form-group">
+        <div class="form-group required">
           <label class="form-label">End Date</label>
           <input 
             type="date" 
             v-model="academicYearEnd"
-            class="form-input"
+            class="input"
             @input="updateField('academicYearEnd', $event.target.value)"
           />
         </div>
@@ -47,13 +47,13 @@
 
       <!-- Number of Terms Row -->
       <div class="form-row">
-        <div class="form-group full-width">
+        <div class="form-group full-width required">
           <label class="form-label">Number of Terms</label>
           <div class="number-input-group">
             <input 
               type="number" 
               v-model.number="numberOfTerms" 
-              class="form-input number-input"
+              class="input number-input"
               placeholder="e.g., 3"
               min="1"
               @input="handleNumberOfTermsChange"
@@ -63,12 +63,14 @@
                 class="number-input-btn minus-btn"
                 @click="decrementTerms"
                 :disabled="numberOfTerms <= 1"
+                type="button"
               >
                 −
               </button>
               <button 
                 class="number-input-btn plus-btn"
                 @click="incrementTerms"
+                type="button"
               >
                 +
               </button>
@@ -83,7 +85,7 @@
           <label class="form-label">Current Academic Term</label>
           <select 
             v-model="selectedTerm" 
-            class="form-select"
+            class="picker"
             @change="updateField('selectedTerm', $event.target.value)"
           >
             <option value="">-- Select a Term --</option>
@@ -101,47 +103,48 @@
 
     <!-- Terms List -->
     <div class="terms-list">
-      <div v-for="(term, index) in values.terms" :key="index" class="term-card">
+      <div v-for="(term, index) in values.terms" :key="index" class="term-card form-card">
         <div class="term-header">
-          <h4 class="term-title">Term {{ index + 1 }}</h4>
+          <h4 class="section-title">Term {{ index + 1 }}</h4>
           <button 
-            class="btn-icon"
+            class="trash-icon"
             @click="removeTerm(index)"
             title="Remove term"
+            type="button"
           >
             ✕
           </button>
         </div>
         
         <div class="term-body">
-          <div class="form-group">
+          <div class="form-group required">
             <label class="form-label">Term Name</label>
             <input 
               type="text" 
               v-model="term.name" 
-              class="form-input"
+              class="input"
               :placeholder="`e.g., Spring ${index + 1}`"
               @input="updateTermField(index, 'name', $event.target.value)"
             />
           </div>
 
           <div class="form-row term-dates-row">
-            <div class="form-group">
+            <div class="form-group required">
               <label class="form-label">Start Date</label>
               <input 
                 type="date" 
                 v-model="term.startDate"
-                class="form-input"
+                class="input"
                 @input="updateTermField(index, 'startDate', $event.target.value)"
               />
             </div>
             
-            <div class="form-group">
+            <div class="form-group required">
               <label class="form-label">End Date</label>
               <input 
                 type="date" 
                 v-model="term.endDate"
-                class="form-input"
+                class="input"
                 @input="updateTermField(index, 'endDate', $event.target.value)"
               />
             </div>
@@ -152,10 +155,13 @@
 
     <div class="form-actions">
       <button 
-        class="btn btn-primary"
+        class="primary-button"
         @click="addTerm"
+        type="button"
       >
-        <span class="icon">+</span> Add Term
+        <span class="button-content">
+          <span class="icon">+</span> Add Term
+        </span>
       </button>
     </div>
   </div>
@@ -352,25 +358,15 @@ export default {
 </script>
 
 <style scoped>
-/* Base Styles */
+/* Component-specific styles that aren't covered by form.css */
 .academic-year-form {
   max-width: 800px;
   margin: 0 auto;
-  padding: 16px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
 .form-header {
   margin-bottom: 20px;
   text-align: center;
-}
-
-.form-title {
-  font-size: 1.4rem;
-  color: #2c3e50;
-  margin-bottom: 6px;
 }
 
 .form-subtitle {
@@ -407,32 +403,6 @@ export default {
   font-weight: 500;
   color: #34495e;
   font-size: 0.9rem;
-}
-
-.form-input,
-.form-select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-  transition: all 0.2s;
-  height: 40px;
-}
-
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-}
-
-.form-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
 }
 
 /* Number Input Group */
@@ -497,65 +467,9 @@ export default {
   margin-bottom: 12px;
 }
 
-.term-title {
-  margin: 0;
-  font-size: 1.1rem;
-  color: #2c3e50;
-}
-
 .term-body {
   display: grid;
   gap: 12px;
-}
-
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #e74c3c;
-  font-size: 1.2rem;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background-color: rgba(231, 76, 60, 0.1);
-}
-
-.form-actions {
-  display: flex;
-  justify-content: center;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 20px;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  font-size: 1rem;
-}
-
-.btn-primary {
-  background-color: #3498db;
-  color: white;
-}
-
-.btn-primary:hover {
-  background-color: #2980b9;
-}
-
-.icon {
-  margin-right: 6px;
 }
 
 /* Responsive Adjustments */
@@ -577,12 +491,6 @@ export default {
 }
 
 @media (max-width: 400px) {
-  .form-input,
-  .form-select {
-    padding: 8px 10px;
-    font-size: 0.95rem;
-  }
-  
   .number-input-btn {
     width: 36px;
     height: 36px;

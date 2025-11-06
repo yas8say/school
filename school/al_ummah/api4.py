@@ -182,7 +182,67 @@ def add_guardian_to_student(student_id, student_name, guardian_info):
         return f"Error: {str(e)}"
 
 @frappe.whitelist()
-def enroll_student(student, className, divisionName, year, term):
+def enroll_single_student(student_data, className, divisionName, generate_qr_code):
+    # print(student_data, className, divisionName)
+
+    # --- Permission check ---
+    if "Administrator" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("You are not authorized to perform this action.")
+
+    # --- Basic validation ---
+    if not student_data or not className or not divisionName:
+        frappe.throw("Student data, class, and division are required.")
+
+    # --- Academic context ---
+    edu_settings = frappe.get_single("Education Settings")
+    year = edu_settings.current_academic_year
+    term = edu_settings.current_academic_term
+
+    try:
+        # --- Enroll the student ---
+        enroll_student(student_data, className, divisionName, year, term, generate_qr_code)
+
+        # --- Get the Student doc name after enrollment ---
+        student_id = frappe.db.get_value(
+            "Student", {"gr_number": student_data.get("GR Number")}, "name"
+        )
+        if not student_id:
+            frappe.throw(f"Could not find enrolled Student with GR Number {student_data.get('GR Number')}")
+
+        full_name = " ".join(
+            part for part in [
+                student_data.get("First Name", "").strip(),
+                student_data.get("Middle Name", "").strip(),
+                student_data.get("Last Name", "").strip()
+            ] if part
+        )
+
+        # --- Get the Student Group ---
+        student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
+        if not student_group:
+            frappe.throw(f"No Student Group found for Program '{className}' and Division '{divisionName}'")
+
+        # --- Determine next roll number ---
+        existing_student_ids = {d.student for d in student_group.students}
+        max_roll_no = max([d.group_roll_number or 0 for d in student_group.students], default=0)
+
+        # --- Add to Student Group if not already present ---
+        if student_id not in existing_student_ids:
+            max_roll_no += 1
+            add_student_to_group(student_group, student_id, full_name, max_roll_no)
+            student_group.save(ignore_permissions=True)
+
+        frappe.db.commit()
+        print(f"✅ Student {full_name} enrolled and added to Student Group {student_group.name}")
+
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.throw(f"Enrollment failed: {str(e)}")
+
+    return {"status": "success", "message": "Student enrolled and added to Student Group successfully!"}
+
+@frappe.whitelist()
+def enroll_student(student, className, divisionName, year, term, generate_qr_code):
     dob = student["Student Date of Birth"]
     first_name = student["First Name"]
     middle_name = student.get("Middle Name", "")
@@ -250,7 +310,39 @@ def enroll_student(student, className, divisionName, year, term):
         student_doc.date_of_birth = dob
         student_doc.student_mobile_number = phone
         student_doc.gr_number = student["GR Number"]
-        student_doc.save()
+        student_doc.save(ignore_permissions=True)
+        # ✅ Generate QR Code if enabled
+        if generate_qr_code:
+            import qrcode
+            import base64
+            from io import BytesIO
+
+            qr_data = f"{student_doc.name} / {student_doc.gr_number} - {student_doc.student_name}"
+
+            qr = qrcode.QRCode(version=1, box_size=10, border=5)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+
+            img = qr.make_image()
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            image_data = buffer.getvalue()
+
+            file_doc = frappe.get_doc({
+                "doctype": "File",
+                "file_name": f"{student_doc.name}_qr.png",
+                "content": image_data,
+                "attached_to_doctype": "Student",
+                "attached_to_name": student_doc.name,
+                "is_private": 0
+            })
+
+            file_doc.insert(ignore_permissions=True)
+
+            # ✅ Do NOT use save() again — use db_set()
+            student_doc.db_set("qr_code", file_doc.file_url)
+
+
         
         # Check if Student creation was successful
         if not student_doc.name:
@@ -329,7 +421,7 @@ def cleanup_created_docs(user, student, program_enrollment):
 
 
 @frappe.whitelist()
-def bulk_enroll_students(className, divisionName, students):
+def bulk_enroll_students(className, divisionName, generate_qr_code, students):
     print(f"Received {len(students)} students")
 
     # --- Security check ---
@@ -391,7 +483,7 @@ def bulk_enroll_students(className, divisionName, students):
 
             try:
                 # Enroll student
-                enroll_student(student, className, divisionName, year, term)
+                enroll_student(student, className, divisionName, year, term, generate_qr_code)
 
                 # Get enrolled student ID
                 student_id = frappe.db.get_value("Student", {"gr_number": student.get("GR Number")}, "name")
@@ -787,3 +879,760 @@ def enroll_single_instructor(teacher):
     except Exception as e:
         print(f"❌ Error while enrolling single instructor: {str(e)}")
         raise Exception(f"❌ Error while enrolling instructor: {str(e)}")
+
+
+# api4.py - Updated with correct field names
+
+import frappe
+import json
+import hmac
+import hashlib
+import requests
+from frappe.utils import nowdate, getdate, flt, now_datetime, get_datetime
+
+@frappe.whitelist()
+def process_student_payment(student_id, invoice_names, mode_of_payment, paid_to_account, paid_amount, cheque_no=None, cheque_date=None):
+    """
+    Process student payment for selected invoices using unified payment entry method
+    Accepts either:
+    - Student.name (primary key) 
+    - GR Number (gr_number field)
+    """
+    try:
+        # Validate input parameters
+        if not all([student_id, invoice_names, mode_of_payment, paid_to_account, paid_amount]):
+            frappe.throw("Missing required parameters")
+
+        # Convert string inputs to proper types
+        if isinstance(invoice_names, str):
+            try:
+                invoice_names = json.loads(invoice_names)
+            except json.JSONDecodeError:
+                frappe.throw("Invalid invoice_names format - must be valid JSON")
+        
+        paid_amount = flt(paid_amount)
+
+        # -----------------------------------------------------
+        # ✅ Step 1: Resolve Student ID (handle both ID and GR Number)
+        # -----------------------------------------------------
+        resolved_student_id = None
+
+        # Case 1 → Direct student ID exists
+        if frappe.db.exists("Student", student_id):
+            resolved_student_id = student_id
+
+        # Case 2 → Maybe 'student_id' is actually a GR Number
+        else:
+            resolved_student_id = frappe.db.get_value(
+                "Student",
+                {"gr_number": student_id},
+                "name"
+            )
+
+        if not resolved_student_id:
+            frappe.throw(f"No student found for ID/GR Number: {student_id}")
+
+        # Get student document for validation
+        student_doc = frappe.get_doc("Student", resolved_student_id)
+        normalized_student_id = student_doc.name
+
+        # Validate invoices exist and belong to the student
+        valid_invoices = []
+        total_outstanding = 0
+        
+        for invoice_name in invoice_names:
+            try:
+                invoice = frappe.get_doc("Sales Invoice", invoice_name)
+                
+                # Check if invoice belongs to the student - compare normalized IDs
+                if invoice.student != normalized_student_id:
+                    frappe.throw(f"Invoice {invoice_name} belongs to student '{invoice.student}' but you're trying to pay for student '{normalized_student_id}'")
+                
+                # Check if invoice is unpaid
+                if invoice.outstanding_amount > 0:
+                    valid_invoices.append({
+                        "name": invoice.name,
+                        "customer": invoice.customer,
+                        "grand_total": invoice.grand_total,
+                        "outstanding_amount": invoice.outstanding_amount
+                    })
+                    total_outstanding += invoice.outstanding_amount
+                else:
+                    frappe.throw(f"Invoice {invoice_name} is already paid")
+                    
+            except frappe.DoesNotExistError:
+                frappe.throw(f"Invoice {invoice_name} not found")
+
+        if not valid_invoices:
+            frappe.throw("No valid unpaid invoices found")
+        
+        # -----------------------------------------------------
+        # ✅ FIXED: Better amount validation with rounding tolerance
+        # -----------------------------------------------------
+        total_outstanding = flt(total_outstanding, 2)  # Ensure 2 decimal precision
+        paid_amount = flt(paid_amount, 2)  # Ensure 2 decimal precision
+        
+        # Calculate difference and allow for small rounding errors
+        amount_difference = abs(paid_amount - total_outstanding)
+        
+        # Allow for rounding differences up to 0.10 (10 cents) or 0.1%
+        rounding_tolerance = max(0.10, total_outstanding * 0.001)  # Whichever is larger
+        
+        if amount_difference > rounding_tolerance:
+            frappe.throw(f"Paid amount ({paid_amount}) does not match total outstanding amount ({total_outstanding}). Difference: {amount_difference}")
+        
+        # Validate account exists
+        if not frappe.db.exists("Account", paid_to_account):
+            frappe.throw(f"Account {paid_to_account} not found")
+        
+        # Validate mode of payment exists
+        if not frappe.db.exists("Mode of Payment", mode_of_payment):
+            frappe.throw(f"Mode of Payment {mode_of_payment} not found")
+        
+        # Use the validated total_outstanding amount to avoid rounding issues
+        validated_paid_amount = total_outstanding
+        
+        # Create single payment entry for all invoices
+        payment_entry_name = create_payment_entry(
+            invoice_data=valid_invoices,
+            mode_of_payment=mode_of_payment,
+            paid_to_account=paid_to_account,
+            paid_amount=validated_paid_amount,  # Use the calculated total
+            cheque_no=cheque_no,
+            cheque_date=cheque_date,
+            student_id=normalized_student_id
+        )
+        
+        # Update invoice statuses
+        update_invoice_status([inv["name"] for inv in valid_invoices])
+        frappe.db.commit()
+        
+        # Generate PDF download URL
+        pdf_download_url = generate_pdf_download_url(payment_entry_name)
+        
+        return {
+            "success": True,
+            "message": f"Payment processed successfully for {len(valid_invoices)} invoice(s)",
+            "processed_invoices": [inv["name"] for inv in valid_invoices],
+            "total_amount": validated_paid_amount,
+            "mode_of_payment": mode_of_payment,
+            "payment_date": nowdate(),
+            "payment_entry": payment_entry_name,
+            "resolved_student_id": normalized_student_id,
+            "calculated_total": total_outstanding,
+            "paid_amount_received": paid_amount,
+            "pdf_download_url": pdf_download_url  # Add PDF URL to response
+        }
+        
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.throw(str(e))
+
+def generate_pdf_download_url(payment_entry_name):
+    """
+    Generate Printview URL for the payment entry using 'test' print format
+    """
+    try:
+        from frappe.utils import get_url
+        from urllib.parse import urlparse, urlunparse
+        
+        # Ensure payment_entry_name is a string, not a dict
+        if isinstance(payment_entry_name, dict):
+            # Extract the actual payment entry name from the dictionary
+            payment_entry_name = payment_entry_name.get('payment_entry')
+        
+        # Validate that we have a proper payment entry name
+        if not payment_entry_name:
+            frappe.log_error("No payment entry name provided for PDF generation")
+            return None
+        
+        # Construct the printview URL with all required parameters
+        printview_url_path = f"/printview?" \
+                           f"doctype=Payment%20Entry&" \
+                           f"name={payment_entry_name}&" \
+                           f"trigger_print=1&" \
+                           f"format=test&" \
+                           f"no_letterhead=1&" \
+                           f"letterhead=No%20Letterhead&" \
+                           f"settings=%7B%7D&" \
+                           f"_lang=en"
+        
+        # Get the full URL
+        full_url = get_url(printview_url_path)
+        
+        # Remove ANY port number regardless of what it is
+        parsed_url = urlparse(full_url)
+        clean_url = urlunparse((
+            parsed_url.scheme,
+            parsed_url.hostname,  # This excludes the port completely
+            parsed_url.path,
+            parsed_url.params,
+            parsed_url.query,
+            parsed_url.fragment
+        ))
+        
+        return clean_url
+        
+    except Exception as e:
+        frappe.log_error(f"Error generating printview URL: {str(e)}")
+        return None
+        
+def create_payment_entry(invoice_data, mode_of_payment, paid_to_account, paid_amount, 
+                       razorpay_payment_id=None, razorpay_order_id=None, razorpay_payment_details=None,
+                       cheque_no=None, cheque_date=None, student_id=None):
+    try:
+        if not invoice_data or len(invoice_data) == 0:
+            return {"success": False, "message": "No invoice data provided"}
+
+        first_invoice_name = invoice_data[0]["name"]
+        first_invoice = frappe.get_doc("Sales Invoice", first_invoice_name)
+        company = first_invoice.company
+        customer = first_invoice.customer
+
+        payment_entry = frappe.new_doc("Payment Entry")
+        
+        payment_entry.payment_type = "Receive"
+        payment_entry.mode_of_payment = mode_of_payment
+        payment_entry.party_type = "Customer"
+        payment_entry.party = customer
+        payment_entry.paid_amount = paid_amount
+        payment_entry.received_amount = paid_amount
+        payment_entry.paid_to = paid_to_account
+        payment_entry.company = company
+        payment_entry.posting_date = nowdate()
+
+        if mode_of_payment == "Cheque":
+            if not cheque_no or not cheque_date:
+                return {"success": False, "message": "Cheque number and date are required for cheque payments"}
+            payment_entry.reference_no = cheque_no
+            payment_entry.reference_date = getdate(cheque_date)
+        
+        elif razorpay_payment_id:
+            payment_entry.reference_no = razorpay_payment_id
+            payment_entry.reference_date = nowdate()
+
+        if student_id:
+            payment_entry.student = student_id
+        
+        if razorpay_order_id:
+            payment_entry.razorpay_order_id = razorpay_order_id
+        if razorpay_payment_id:
+            payment_entry.razorpay_payment_id = razorpay_payment_id
+        if razorpay_payment_details:
+            payment_entry.razorpay_payment_details = json.dumps(razorpay_payment_details)
+        
+        payment_entry.remarks = f"Payment for {len(invoice_data)} invoice(s) via {mode_of_payment}"
+
+        for invoice in invoice_data:
+            payment_entry.append("references", {
+                "reference_doctype": "Sales Invoice",
+                "reference_name": invoice["name"],
+                "total_amount": invoice["grand_total"],
+                "outstanding_amount": invoice["outstanding_amount"],
+                "allocated_amount": invoice["outstanding_amount"]
+            })
+
+        payment_entry.insert(ignore_permissions=True)
+        payment_entry.submit()
+
+        return {
+            "success": True,
+            "payment_entry": payment_entry.name
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to create payment entry: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Failed to create payment entry: {str(e)}"
+        }
+
+def update_invoice_status(invoice_names):
+    for invoice_name in invoice_names:
+        frappe.db.set_value("Sales Invoice", invoice_name, "status", "Paid")
+        frappe.db.set_value("Sales Invoice", invoice_name, "outstanding_amount", 0)
+
+def rollback_payments(processed_invoices):
+    try:
+        for invoice_name in processed_invoices:
+            payment_entries = frappe.get_all("Payment Entry Reference", 
+                filters={"reference_name": invoice_name},
+                fields=["parent"]
+            )
+            
+            for pe in payment_entries:
+                payment_entry = frappe.get_doc("Payment Entry", pe.parent)
+                if payment_entry.docstatus == 1:
+                    payment_entry.cancel()
+                elif payment_entry.docstatus == 0:
+                    payment_entry.delete()
+                    
+    except Exception as e:
+        frappe.log_error(f"Error rolling back payments: {str(e)}")
+
+@frappe.whitelist()
+def get_all_paid_to_accounts():
+    try:
+        company = frappe.defaults.get_user_default("company")
+        
+        if not company:
+            companies = frappe.get_all("Company", fields=["name"])
+            if companies:
+                company = companies[0].name
+            else:
+                return {
+                    "success": False,
+                    "message": "No company found"
+                }
+        
+        accounts = frappe.get_all("Account", 
+            filters={
+                "company": company,
+                "is_group": 0,
+                "account_type": ["in", ["Receivable", "Bank", "Cash"]]
+            },
+            fields=["name", "account_name", "account_type", "company"],
+            order_by="account_type, account_name"
+        )
+        
+        return {
+            "success": True,
+            "accounts": accounts,
+            "company": company
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error fetching paid to accounts: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Failed to fetch accounts: {str(e)}",
+            "accounts": []
+        }
+
+@frappe.whitelist()
+def get_sales_invoices_by_student(student_id):
+    """
+    Get all unpaid sales invoices for a student.
+    Accepts either:
+    - Student.name  (primary key)
+    - GR Number (gr_number field)
+    """
+
+    try:
+        if not student_id:
+            return {
+                "success": False,
+                "message": "Student ID or GR Number is required"
+            }
+
+        # -----------------------------------------------------
+        # ✅ Step 1: Resolve Student ID
+        # -----------------------------------------------------
+
+        resolved_student = None
+
+        # Case 1 → Direct student ID exists
+        if frappe.db.exists("Student", student_id):
+            resolved_student = student_id
+
+        # Case 2 → Maybe 'student_id' is actually a GR Number
+        else:
+            resolved_student = frappe.db.get_value(
+                "Student",
+                {"gr_number": student_id},
+                "name"
+            )
+
+        if not resolved_student:
+            return {
+                "success": False,
+                "message": f"No student found for ID/GR Number: {student_id}"
+            }
+
+        # -----------------------------------------------------
+        # ✅ Step 2: Fetch unpaid sales invoices
+        # -----------------------------------------------------
+
+        invoices = frappe.get_all(
+            "Sales Invoice",
+            filters={
+                "student": resolved_student,
+                "docstatus": 1,
+                "outstanding_amount": [">", 0]
+            },
+            fields=[
+                "name", "customer", "customer_name", "student",
+                "posting_date", "grand_total", "outstanding_amount",
+                "status", "due_date"
+            ],
+            order_by="posting_date desc"
+        )
+
+        return {
+            "success": True,
+            "student_input": student_id,
+            "resolved_student_id": resolved_student,
+            "count": len(invoices),
+            "invoices": invoices
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "get_sales_invoices_by_student Error")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }
+
+
+@frappe.whitelist(allow_guest=True)
+def verify_razorpay_payment(razorpay_payment_id, razorpay_order_id, razorpay_signature, 
+                          invoice_names, student_id, paid_to_account, paid_amount):
+    """
+    Verify Razorpay payment and process using unified payment entry
+    """
+    try:
+        # Get Razorpay secret key from Frappe settings
+        razorpay_settings = frappe.get_single("Razorpay Settings")
+        secret_key = razorpay_settings.get_password("api_secret")
+        
+        if not secret_key:
+            return {
+                "success": False,
+                "message": "Razorpay API secret not configured"
+            }
+        
+        # Verify the signature
+        payload = f"{razorpay_order_id}|{razorpay_payment_id}"
+        generated_signature = hmac.new(
+            secret_key.encode(),
+            payload.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Compare signatures
+        if not hmac.compare_digest(generated_signature, razorpay_signature):
+            return {
+                "success": False,
+                "message": "Invalid payment signature"
+            }
+
+        # Fetch payment details from Razorpay API for additional verification
+        payment_details = get_razorpay_payment_details(razorpay_payment_id, secret_key)
+        
+        if not payment_details or payment_details.get('status') != 'captured':
+            return {
+                "success": False,
+                "message": "Payment not captured or invalid"
+            }
+
+        # Convert string inputs to proper types
+        if isinstance(invoice_names, str):
+            try:
+                invoice_names = json.loads(invoice_names)
+            except json.JSONDecodeError:
+                return {
+                    "success": False,
+                    "message": "Invalid invoice_names format"
+                }
+        
+        paid_amount = flt(paid_amount)
+
+        # -----------------------------------------------------
+        # ✅ Step 1: Resolve Student ID (handle both ID and GR Number)
+        # -----------------------------------------------------
+        resolved_student_id = None
+
+        # Case 1 → Direct student ID exists
+        if frappe.db.exists("Student", student_id):
+            resolved_student_id = student_id
+
+        # Case 2 → Maybe 'student_id' is actually a GR Number
+        else:
+            resolved_student_id = frappe.db.get_value(
+                "Student",
+                {"gr_number": student_id},
+                "name"
+            )
+
+        if not resolved_student_id:
+            return {
+                "success": False,
+                "message": f"No student found for ID/GR Number: {student_id}"
+            }
+
+        # Get student document for validation
+        student_doc = frappe.get_doc("Student", resolved_student_id)
+        normalized_student_id = student_doc.name
+
+        # Validate invoices exist and belong to the student
+        valid_invoices = []
+        total_outstanding = 0
+        
+        for invoice_name in invoice_names:
+            try:
+                invoice = frappe.get_doc("Sales Invoice", invoice_name)
+                
+                # Check if invoice belongs to the student - compare normalized IDs
+                if invoice.student != normalized_student_id:
+                    return {
+                        "success": False,
+                        "message": f"Invoice {invoice_name} belongs to student '{invoice.student}' but you're trying to pay for student '{normalized_student_id}'"
+                    }
+                
+                # Check if invoice is unpaid
+                if invoice.outstanding_amount > 0:
+                    valid_invoices.append({
+                        "name": invoice.name,
+                        "customer": invoice.customer,
+                        "grand_total": invoice.grand_total,
+                        "outstanding_amount": invoice.outstanding_amount
+                    })
+                    total_outstanding += invoice.outstanding_amount
+                else:
+                    return {
+                        "success": False,
+                        "message": f"Invoice {invoice_name} is already paid"
+                    }
+                    
+            except frappe.DoesNotExistError:
+                return {
+                    "success": False,
+                    "message": f"Invoice {invoice_name} not found"
+                }
+
+        if not valid_invoices:
+            return {
+                "success": False,
+                "message": "No valid unpaid invoices found"
+            }
+        
+        # -----------------------------------------------------
+        # ✅ FIXED: Better amount validation with rounding tolerance
+        # -----------------------------------------------------
+        total_outstanding = flt(total_outstanding, 2)  # Ensure 2 decimal precision
+        paid_amount = flt(paid_amount, 2)  # Ensure 2 decimal precision
+        
+        # Calculate difference and allow for small rounding errors
+        amount_difference = abs(paid_amount - total_outstanding)
+        
+        # Allow for rounding differences up to 0.10 (10 cents) or 0.1%
+        rounding_tolerance = max(0.10, total_outstanding * 0.001)  # Whichever is larger
+        
+        if amount_difference > rounding_tolerance:
+            return {
+                "success": False,
+                "message": f"Paid amount ({paid_amount}) does not match total outstanding amount ({total_outstanding}). Difference: {amount_difference}"
+            }
+        
+        # Verify payment amount matches invoice total (from Razorpay)
+        payment_amount = payment_details.get('amount', 0) / 100
+        payment_amount = flt(payment_amount, 2)
+        
+        if abs(payment_amount - total_outstanding) > rounding_tolerance:
+            return {
+                "success": False,
+                "message": f"Payment amount mismatch. Expected: {total_outstanding}, Paid: {payment_amount}"
+            }
+        
+        # Validate account exists
+        if not frappe.db.exists("Account", paid_to_account):
+            return {
+                "success": False,
+                "message": f"Account {paid_to_account} not found"
+            }
+        
+        # Use "Online" as mode of payment for Razorpay transactions
+        mode_of_payment = "Online"
+        
+        # Validate mode of payment exists
+        if not frappe.db.exists("Mode of Payment", mode_of_payment):
+            return {
+                "success": False,
+                "message": f"Mode of Payment {mode_of_payment} not found"
+            }
+        
+        # Use the validated total_outstanding amount to avoid rounding issues
+        validated_paid_amount = total_outstanding
+        
+        # Create SINGLE payment entry for ALL invoices
+        payment_result = create_payment_entry(
+            invoice_data=valid_invoices,
+            mode_of_payment=mode_of_payment,
+            paid_to_account=paid_to_account,
+            paid_amount=validated_paid_amount,
+            razorpay_payment_id=razorpay_payment_id,
+            razorpay_order_id=razorpay_order_id,
+            razorpay_payment_details=payment_details,
+            student_id=normalized_student_id
+        )
+        
+        if payment_result.get("success"):
+            # Update invoice statuses
+            update_invoice_status([inv["name"] for inv in valid_invoices])
+            frappe.db.commit()
+            
+            # Generate PDF download URL
+            pdf_download_url = generate_pdf_download_url(payment_result.get("payment_entry"))
+            
+            return {
+                "success": True,
+                "message": "Payment processed successfully",
+                "payment_id": razorpay_payment_id,
+                "invoices_processed": [inv["name"] for inv in valid_invoices],
+                "amount": validated_paid_amount,
+                "mode_of_payment": mode_of_payment,
+                "payment_entry": payment_result.get("payment_entry"),
+                "resolved_student_id": normalized_student_id,
+                "calculated_total": total_outstanding,
+                "paid_amount_received": paid_amount,
+                "pdf_download_url": pdf_download_url  # Add PDF URL to response
+            }
+        else:
+            frappe.db.rollback()
+            return payment_result
+        
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(f"Razorpay payment processing failed: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Payment processing failed: {str(e)}"
+        }
+
+def get_razorpay_payment_details(payment_id, secret_key):
+    """
+    Fetch payment details from Razorpay API
+    """
+    try:
+        razorpay_settings = frappe.get_single("Razorpay Settings")
+        key_id = razorpay_settings.api_key
+        
+        auth = (key_id, secret_key)
+        response = requests.get(
+            f"https://api.razorpay.com/v1/payments/{payment_id}",
+            auth=auth,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            frappe.log_error(f"Razorpay API error: {response.text}")
+            return None
+            
+    except Exception as e:
+        frappe.log_error(f"Failed to fetch Razorpay payment: {str(e)}")
+        return None
+
+def get_razorpay_order_details(order_id, secret_key):
+    """
+    Fetch order details from Razorpay API
+    """
+    try:
+        razorpay_settings = frappe.get_single("Razorpay Settings")
+        key_id = razorpay_settings.api_key
+        
+        auth = (key_id, secret_key)
+        response = requests.get(
+            f"https://api.razorpay.com/v1/orders/{order_id}",
+            auth=auth,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            frappe.log_error(f"Razorpay Order API error: {response.text}")
+            return None
+            
+    except Exception as e:
+        frappe.log_error(f"Failed to fetch Razorpay order: {str(e)}")
+        return None
+
+@frappe.whitelist()
+def create_razorpay_order(invoice_names, student_id, total_amount, paid_to_account):
+    """
+    Create Razorpay order for the selected invoices
+    """
+    try:
+        razorpay_settings = frappe.get_single("Razorpay Settings")
+        secret_key = razorpay_settings.get_password("api_secret")
+        key_id = razorpay_settings.api_key
+        
+        if not key_id or not secret_key:
+            return {
+                "success": False,
+                "message": "Razorpay credentials not configured. Please set up API Key and API Secret in Razorpay Settings."
+            }
+        
+        # Convert amount to paise (Razorpay requirement)
+        amount_in_paise = int(float(total_amount) * 100)
+        
+        # Create order data
+        order_data = {
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "receipt": f"stu_{student_id}_{now_datetime().strftime('%Y%m%d_%H%M%S')}",
+            "notes": {
+                "student_id": student_id,
+                "invoice_names": json.dumps(invoice_names),
+                "paid_to_account": paid_to_account,
+                "description": f"Payment for {len(invoice_names)} invoice(s)"
+            },
+            "payment_capture": 1
+        }
+        
+        # Create order via Razorpay API
+        auth = (key_id, secret_key)
+        response = requests.post(
+            "https://api.razorpay.com/v1/orders",
+            json=order_data,
+            auth=auth,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            order_data = response.json()
+            return {
+                "success": True,
+                "order_id": order_data['id'],
+                "amount": order_data['amount'],
+                "currency": order_data['currency'],
+                "key_id": key_id
+            }
+        else:
+            frappe.log_error(f"Razorpay order creation failed: {response.text}")
+            return {
+                "success": False,
+                "message": "Failed to create payment order. Please check Razorpay settings."
+            }
+            
+    except Exception as e:
+        frappe.log_error(f"Razorpay order creation error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Payment setup failed: {str(e)}"
+        }
+
+@frappe.whitelist()
+def get_razorpay_settings_status():
+    """
+    Check if Razorpay settings are configured
+    """
+    try:
+        razorpay_settings = frappe.get_single("Razorpay Settings")
+        has_key_id = bool(razorpay_settings.api_key)
+        has_secret_key = bool(razorpay_settings.get_password("api_secret"))
+        
+        return {
+            "success": True,
+            "configured": has_key_id and has_secret_key,
+            "has_key_id": has_key_id,
+            "has_secret_key": has_secret_key
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "configured": False,
+            "error": str(e)
+        }

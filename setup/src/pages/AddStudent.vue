@@ -172,7 +172,7 @@
             >
             <span class="error-message" v-if="errors.grNumber">{{ errors.grNumber }}</span>
           </div>
-
+          
           <div class="form-group required">
             <label>Email Address</label>
             <input
@@ -196,6 +196,19 @@
           </div>
         </div>
       </div>
+
+      <!-- In Personal Details section, after Phone Number field -->
+    <div class="form-group">
+      <label>Aadhar Number</label>
+      <input
+        v-model="formData.student_data['Aadhar Number']"
+        type="text"
+        class="input"
+        placeholder="Enter Aadhar number"
+        maxlength="12"
+      >
+      <span class="error-message" v-if="errors.aadharNumber">{{ errors.aadharNumber }}</span>
+    </div>
 
       <!-- Guardian Information -->
       <div class="form-section">
@@ -303,7 +316,22 @@
           </div>
         </div>
       </div>
-
+      <!-- Add this before the Submit Button section -->
+    <div class="form-section">
+      <h3 class="section-title">Additional Options</h3>
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input
+            v-model="formData.generateQRCode"
+            type="checkbox"
+            class="checkbox"
+          >
+          <span class="checkmark"></span>
+          Generate QR Code
+        </label>
+        <p class="checkbox-description">Check this to generate a QR code for the student</p>
+      </div>
+    </div>
       <!-- Submit Button and Status Message -->
       <div class="form-actions">
         <button 
@@ -351,6 +379,7 @@ export default {
       academicYear: null,
       className: null,
       divisionName: null,
+      generateQRCode: false, // Add this line
       student_data: {
         'First Name': '',
         'Middle Name': '',
@@ -359,6 +388,7 @@ export default {
         'GR Number': '',
         'Email Address': '',
         'Phone Number': '',
+        'Aadhar Number': '', // Add this line
         'Guardian Name': '',
         'Guardian Number': '',
         'Relation': '',
@@ -447,27 +477,28 @@ export default {
       }
     });
 
-    const enrollStudentResource = createResource({
-      url: 'school.al_ummah.api3.enroll_single_student',
-      params: {
-        academicYear: formData.academicYear,
-        className: formData.className,
-        divisionName: formData.divisionName,
-        student_data: formData.student_data
-      },
-      onSuccess: (response) => {
-        isSubmitting.value = false;
-        submitSuccess.value = true;
-        successMessage.value = `Student ${formData.student_data['First Name']} ${formData.student_data['Last Name']} has been successfully enrolled in ${formData.className} - ${formData.divisionName} for the ${formData.academicYear} academic year.`;
-        showResultMessage.value = true;
-      },
-      onError: (err) => {
-        isSubmitting.value = false;
-        submitSuccess.value = false;
-        errorMessage.value = err.messages?.[0] || 'An unexpected error occurred while enrolling the student. Please try again.';
-        showResultMessage.value = true;
-      }
-    });
+const enrollStudentResource = createResource({
+  url: 'school.al_ummah.api4.enroll_single_student',
+  params: computed(() => ({
+    academic_year: formData.academicYear,
+    class_name: formData.className,
+    division_name: formData.divisionName,
+    generate_qr_code: formData.generateQRCode,
+    student_data: formData.student_data
+  })),
+  onSuccess: (response) => {
+    isSubmitting.value = false;
+    submitSuccess.value = true;
+    successMessage.value = `Student ${formData.student_data['First Name']} ${formData.student_data['Last Name']} has been successfully enrolled in ${formData.className} - ${formData.divisionName} for the ${formData.academicYear} academic year.`;
+    showResultMessage.value = true;
+  },
+  onError: (err) => {
+    isSubmitting.value = false;
+    submitSuccess.value = false;
+    errorMessage.value = err.messages?.[0] || 'An unexpected error occurred while enrolling the student. Please try again.';
+    showResultMessage.value = true;
+  }
+});
 
     // Fetch initial data on mount
     onMounted(() => {
@@ -503,10 +534,22 @@ export default {
       }
     }
 
+    // Add this validation function
+    function validAadhar(aadhar) {
+      if (!aadhar) return true; // Optional field
+      const re = /^[0-9]{12}$/;
+      return re.test(aadhar);
+    }
+
     function validateForm() {
       Object.assign(errors, {});
       let isValid = true;
 
+      const aadharNumber = formData.student_data['Aadhar Number'].trim();
+      if (aadharNumber && !validAadhar(aadharNumber)) {
+        errors.aadharNumber = 'Please enter a valid 12-digit Aadhar number';
+        isValid = false;
+      }
       // Required fields validation
       if (!formData.academicYear) {
         errors.academicYear = 'Please select an academic year';
@@ -621,6 +664,7 @@ export default {
           academicYear: formData.academicYear,
           className: formData.className,
           divisionName: formData.divisionName,
+          generate_qr_code: formData.generateQRCode, // Add this line
           student_data: { ...formData.student_data }
         }
       });
@@ -632,6 +676,7 @@ export default {
         academicYear: academicYears.value.length > 0 ? academicYears.value[0] : null,
         className: null,
         divisionName: null,
+        generateQRCode: false, // Add this line
         student_data: {
           'First Name': '',
           'Middle Name': '',
@@ -640,6 +685,7 @@ export default {
           'GR Number': '',
           'Email Address': '',
           'Phone Number': '',
+          'Aadhar Number': '', // Add this line
           'Guardian Name': '',
           'Guardian Number': '',
           'Relation': '',

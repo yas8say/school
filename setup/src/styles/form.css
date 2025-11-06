@@ -1116,6 +1116,26 @@ svg:not(.icon) {
   }
   .multiple-errors {
   font-size: 0.9em;
+  }
+  .checkbox-group {
+  margin: 1rem 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox {
+  margin-right: 0.5rem;
+}
+
+.checkbox-description {
+  margin: 0.25rem 0 0 1.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
 }
 
 

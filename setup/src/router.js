@@ -24,6 +24,18 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       {
+        path: 'fee-schedule',
+        name: 'Fee Schedule',
+        component: () => import('@/pages/FeeSchedule.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: 'fee-payments',
+        name: 'Fee Payments',
+        component: () => import('@/pages/FeePayments.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
         path: 'quick-setup',
         name: 'QuickSetup',
         component: () => import('@/pages/QuickSetup.vue'),

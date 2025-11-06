@@ -116,7 +116,9 @@ import UsePreviousData from './UsePreviousData.vue';
 import ProgramSelection from './ProgramSelection.vue';
 import SubjectsDivisions from './SubjectsDivisions.vue';
 import GradingSystem from './GradingSystem.vue';
-
+import FeeStructureCreator from './FeeStructureCreator.vue';
+import '@/styles/form.css';
+ 
 export default {
   name: 'MultiStepForm',
   components: {
@@ -125,7 +127,8 @@ export default {
     UsePreviousData,
     ProgramSelection,
     SubjectsDivisions,
-    GradingSystem
+    GradingSystem,
+    FeeStructureCreator
   },
   setup() {
     // Reactive state
@@ -153,6 +156,7 @@ export default {
       commonSubjects: [],
       commonDivisions: [],
       dontCreateClasses: false,
+      feeStructures: [], // NEW FIELD
       gradingSystem: {
         selectedOption: '', // 'previous' or 'manual'
         scaleName: '',
@@ -168,6 +172,7 @@ export default {
       { title: 'Grading System (Optional)', component: 'GradingSystem' }, // Made optional again
       { title: 'Use Previous Data', component: 'UsePreviousData' },
       { title: 'Select Institution Type & Classes', component: 'ProgramSelection' },
+      { title: 'Create Fee Structures', component: 'FeeStructureCreator' }, // NEW STEP
       { title: 'Subjects and Divisions', component: 'SubjectsDivisions' }
     ]);
 
