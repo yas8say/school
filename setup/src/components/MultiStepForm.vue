@@ -157,6 +157,7 @@ export default {
       commonDivisions: [],
       dontCreateClasses: false,
       feeStructures: [], // NEW FIELD
+      setAsCurrent: false, // ADD THIS LINE
       gradingSystem: {
         selectedOption: '', // 'previous' or 'manual'
         scaleName: '',
@@ -377,7 +378,7 @@ export default {
       showMissingFields.value = false;
 
       // Grading system is optional, so remove it from exceptions check
-      const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes', 'gradingSystem', 'gradingCompleted'];
+      const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes', 'gradingSystem', 'gradingCompleted', 'setAsCurrent'];
       const missing = checkMissingFields(formValues, exceptions);
 
       if (missing.length > 0) {

@@ -7,7 +7,9 @@
  "field_order": [
   "admin_settings_section",
   "update_data",
-  "session_expiry"
+  "session_expiry",
+  "next_academic_year",
+  "promote_students"
  ],
  "fields": [
   {
@@ -25,13 +27,25 @@
    "fieldname": "session_expiry",
    "fieldtype": "Data",
    "label": "Session Expiry"
+  },
+  {
+   "fieldname": "next_academic_year",
+   "fieldtype": "Link",
+   "label": "Next Academic Year",
+   "options": "Academic Year"
+  },
+  {
+   "default": "0",
+   "fieldname": "promote_students",
+   "fieldtype": "Check",
+   "label": "Allow Students Promotion for Instructors"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-23 23:43:35.996861",
+ "modified": "2025-11-07 11:51:35.074316",
  "modified_by": "Administrator",
  "module": "Al-Ummah",
  "name": "Admin Settings",

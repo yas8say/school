@@ -41,6 +41,244 @@ def fetch_grading_scales():
         return {"success": False, "message": str(e)}
 
 @frappe.whitelist()
+def fetch_student_group(current_group_name):
+    """
+    Fetch the next student group for promotion after checking permissions and generating the next group name
+    """
+    # Check if students promotion is allowed for instructors
+    admin_settings = frappe.get_single("Admin Settings")
+    
+    if not admin_settings.promote_students:
+        return {
+            "success": False,
+            "message": "Student promotion is not allowed for instructors. Please contact administrator.",
+            "allowed": False
+        }
+    
+    # Check if next academic year is set
+    if not admin_settings.next_academic_year:
+        return {
+            "success": False,
+            "message": "Next academic year is not configured. Please contact administrator.",
+            "allowed": True
+        }
+    
+    # Generate the next group name and program using the promote_student_group function
+    next_group_result = promote_student_group(current_group_name)
+    
+    if not next_group_result or not next_group_result.get('next_group_base_name'):
+        return {
+            "success": False,
+            "message": f"Cannot promote group '{current_group_name}'. It may be the final year/level.",
+            "allowed": True
+        }
+    
+    next_group_base_name = next_group_result['next_group_base_name']
+    next_program_name = next_group_result['next_program_name']
+    
+    # Extract academic year from current group name (if exists)
+    current_academic_year = None
+    if "(" in current_group_name and ")" in current_group_name:
+        # Extract content between parentheses
+        start_idx = current_group_name.find("(") + 1
+        end_idx = current_group_name.find(")")
+        current_academic_year = current_group_name[start_idx:end_idx]
+    
+    # Construct new group name with next academic year
+    if current_academic_year:
+        # Replace current academic year with next academic year
+        next_group_name = f"{next_group_base_name} ({admin_settings.next_academic_year})"
+    else:
+        # If no academic year in current name, append next academic year
+        next_group_name = f"{next_group_base_name} ({admin_settings.next_academic_year})"
+    
+    # Check if the next group exists in Student Group doctype
+    try:
+        next_group_exists = frappe.db.exists("Student Group", next_group_name)
+        
+        if next_group_exists:
+            return {
+                "success": True,
+                "message": "Next student group found successfully",
+                "allowed": True,
+                "current_group": current_group_name,
+                "next_group": next_group_name,
+                "next_academic_year": admin_settings.next_academic_year,
+                "next_program": next_program_name,  # Next program name from level logic
+                "group_exists": True
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Next student group '{next_group_name}' not found in the system",
+                "allowed": True,
+                "current_group": current_group_name,
+                "next_group": next_group_name,
+                "next_academic_year": admin_settings.next_academic_year,
+                "next_program": next_program_name,  # Next program name from level logic
+                "group_exists": False
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error checking student group: {str(e)}",
+            "allowed": True
+        }
+
+
+def promote_student_group(group_name):
+    """
+    Generate the next level group name and program based on the current group name
+    Returns: {'next_group_base_name': '2nd-A', 'next_program_name': '2nd'}
+    """
+    # ---- SCHOOL LEVELS ----
+    school_levels = [
+        "Nursery", "Jr KG", "Sr KG",
+        "1st", "2nd", "3rd", "4th", "5th",
+        "6th", "7th", "8th", "9th", "10th",
+        "11th", "12th"
+    ]
+
+    # ---- COLLEGE LEVELS ----
+    bachelors_levels = ["FY Bachelors", "SY Bachelors", "TY Bachelors", "Final Year Bachelors"]
+    btech_levels = ["FY BTech", "SY BTech", "TY BTech", "Final Year BTech"]
+    masters_levels = ["FY Masters", "SY Masters"]
+    phd_levels = ["PhD Year 1", "PhD Year 2", "PhD Year 3", "PhD Year 4", "PhD Year 5"]
+
+    # ---- DIPLOMA LEVELS (NEW) ----
+    diploma_levels = ["FY Diploma", "SY Diploma", "Final Year Diploma"]
+
+    # Remove academic year from group name for processing
+    base_group_name = group_name
+    if "(" in group_name and ")" in group_name:
+        base_group_name = group_name.split("(")[0].strip()
+
+    # ------------------------------------
+    # SCHOOL LOGIC
+    # ------------------------------------
+    for level in school_levels:
+        if base_group_name.startswith(level):
+            # Handle divisions like "2nd-A", "3rd-B", etc.
+            remaining_part = base_group_name.replace(level, "").strip()
+            division = ""
+            if remaining_part and remaining_part[0] == "-":
+                division = remaining_part
+            elif remaining_part:
+                # Handle cases with space or other separators
+                division = " " + remaining_part
+            
+            idx = school_levels.index(level)
+            if idx == len(school_levels) - 1:
+                return None  # Cannot promote 12th
+            
+            next_level = school_levels[idx+1]
+            next_group_base_name = f"{next_level}{division}"
+            next_program_name = next_level  # For school levels, program is the level name
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    # ------------------------------------
+    # BACHELORS LOGIC
+    # ------------------------------------
+    for level in bachelors_levels:
+        if base_group_name.startswith(level):
+            suffix = base_group_name.replace(level, "").strip()
+            idx = bachelors_levels.index(level)
+            if idx == len(bachelors_levels) - 1:
+                return None
+            
+            next_level = bachelors_levels[idx+1]
+            next_group_base_name = f"{next_level} {suffix}".strip()
+            next_program_name = "Bachelors"  # Program remains "Bachelors" for all bachelor levels
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    # ------------------------------------
+    # BTECH LOGIC
+    # ------------------------------------
+    for level in btech_levels:
+        if base_group_name.startswith(level):
+            suffix = base_group_name.replace(level, "").strip()
+            idx = btech_levels.index(level)
+            if idx == len(btech_levels) - 1:
+                return None
+            
+            next_level = btech_levels[idx+1]
+            next_group_base_name = f"{next_level} {suffix}".strip()
+            next_program_name = "BTech"  # Program remains "BTech" for all BTech levels
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    # ------------------------------------
+    # MASTERS LOGIC
+    # ------------------------------------
+    for level in masters_levels:
+        if base_group_name.startswith(level):
+            suffix = base_group_name.replace(level, "").strip()
+            idx = masters_levels.index(level)
+            if idx == len(masters_levels) - 1:
+                return None
+            
+            next_level = masters_levels[idx+1]
+            next_group_base_name = f"{next_level} {suffix}".strip()
+            next_program_name = "Masters"  # Program remains "Masters" for all master levels
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    # ------------------------------------
+    # PhD LOGIC
+    # ------------------------------------
+    for level in phd_levels:
+        if base_group_name.startswith(level):
+            suffix = base_group_name.replace(level, "").strip()
+            idx = phd_levels.index(level)
+            if idx == len(phd_levels) - 1:
+                return None
+            
+            next_level = phd_levels[idx+1]
+            next_group_base_name = f"{next_level} {suffix}".strip()
+            next_program_name = "PhD"  # Program remains "PhD" for all PhD levels
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    # ------------------------------------
+    # DIPLOMA LOGIC (NEW)
+    # ------------------------------------
+    for level in diploma_levels:
+        if base_group_name.startswith(level):
+            suffix = base_group_name.replace(level, "").strip()
+            idx = diploma_levels.index(level)
+            if idx == len(diploma_levels) - 1:
+                return None
+            
+            next_level = diploma_levels[idx+1]
+            next_group_base_name = f"{next_level} {suffix}".strip()
+            next_program_name = "Diploma"  # Program remains "Diploma" for all diploma levels
+            
+            return {
+                'next_group_base_name': next_group_base_name,
+                'next_program_name': next_program_name
+            }
+
+    return None  # Not matched
+    
+@frappe.whitelist()
 def fetch_admin_settings():
     """Fetch Admin and System Settings values."""
     admin_settings = frappe.get_single("Admin Settings")
@@ -48,18 +286,28 @@ def fetch_admin_settings():
 
     return {
         "allow_instructors_modify_student": admin_settings.update_data,
+        "allow_students_promotion_for_instructors": admin_settings.promote_students,
+        "next_academic_year": admin_settings.next_academic_year,
         "session_expiry": system_settings.session_expiry or "24:00",
     }
 
 
 @frappe.whitelist()
-def save_admin_settings(allow_instructors_modify_student=None, session_expiry=None):
+def save_admin_settings(allow_instructors_modify_student=None, allow_students_promotion_for_instructors=None, next_academic_year=None, session_expiry=None):
     """Update Admin and System Settings safely."""
     # Update Admin Settings
     admin_settings = frappe.get_single("Admin Settings")
+    
     if allow_instructors_modify_student is not None:
         admin_settings.update_data = int(bool(allow_instructors_modify_student))
-        admin_settings.save(ignore_permissions=True)
+    
+    if allow_students_promotion_for_instructors is not None:
+        admin_settings.promote_students = int(bool(allow_students_promotion_for_instructors))
+    
+    if next_academic_year is not None:
+        admin_settings.next_academic_year = next_academic_year
+    
+    admin_settings.save(ignore_permissions=True)
 
     # Update System Settings
     if session_expiry is not None:
@@ -127,6 +375,7 @@ def get_divisions1(values):
     divisions = frappe.get_all("Student Group", filters={"program": class_name, "academic_year": year})
     return divisions
 
+
 @frappe.whitelist()
 def get_academic_years():
     edu_settings = frappe.get_single("Education Settings")
@@ -144,7 +393,31 @@ def get_academic_years():
 
     return years
 
-
+@frappe.whitelist()
+def get_next_academic_years():
+    # Get all academic years with their full documents
+    all_academic_years = frappe.get_all(
+        "Academic Year",
+        fields=["name", "academic_year_name", "year_start_date", "year_end_date"]
+    )
+    
+    # Get current date for comparison
+    from datetime import datetime
+    current_date = datetime.now().date()
+    
+    # Filter years that start in the future
+    next_years = []
+    for year in all_academic_years:
+        year_doc = frappe.get_doc("Academic Year", year.name)
+        # Compare year start dates to find future academic years
+        if year_doc.year_start_date and year_doc.year_start_date > current_date:
+            next_years.append(year)
+    
+    # Sort next years by start date (ascending)
+    next_years.sort(key=lambda x: frappe.get_doc("Academic Year", x.name).year_start_date)
+    
+    # Return only the names of future academic years
+    return [{"name": year.name, "academic_year_name": year.academic_year_name or year.name} for year in next_years]
 
 
 @frappe.whitelist()
@@ -184,6 +457,7 @@ def quick_setup(values):
         academic_year_start = values.get("academicYearStart")
         academic_year_end = values.get("academicYearEnd")
         current_term = values.get("selectedTerm")
+        set_as_current = bool(values.get("setAsCurrent"))
         
         if not academic_year or not terms:
             raise frappe.ValidationError("Missing required fields: academicYear, term, or institutionName.")
@@ -193,7 +467,7 @@ def quick_setup(values):
         
         # Set academic details
         set_academic_details(
-            academic_year, academic_year_start, academic_year_end, terms, current_term
+            academic_year, academic_year_start, academic_year_end, terms, current_term, set_as_current
         )
         save_previous_class_structure(values)
         
@@ -337,100 +611,20 @@ def create_fee_category(category_name):
         return None
 
 @frappe.whitelist()
-def save_assessment_structure(payload):
-    try:
-        structure = payload.get("assessmentStructure", {})
-        root_groups = structure.get("assessmentGroups", [])
-
-        if not root_groups:
-            return {"status": "failed", "message": "No assessment groups provided."}
-
-        # ✅ Ensure master root exists
-        ROOT = "All Assessment Groups"
-        if not frappe.db.exists("Assessment Group", ROOT):
-            frappe.get_doc({
-                "doctype": "Assessment Group",
-                "assessment_group": ROOT,
-                "is_group": 1
-            }).insert(ignore_permissions=True)
-
-        for parent in root_groups:
-
-            parent_name = parent.get("assessmentGroupParentName")
-            child_groups = parent.get("assessmentGroups", [])
-
-            if not parent_name:
-                continue
-
-            # ✅ Parent group (forced under "All Assessment Groups")
-            if not frappe.db.exists("Assessment Group", parent_name):
-                frappe.get_doc({
-                    "doctype": "Assessment Group",
-                    "assessment_group_name": parent_name,
-                    "is_group": 1,
-                    "parent_assessment_group": ROOT
-                }).insert(ignore_permissions=True)
-
-            # ✅ Process child groups
-            for child in child_groups:
-                group_name = child.get("assessmentGroup")
-                criteria_list = child.get("assessmentCriteria", [])
-
-                if not group_name:
-                    continue
-
-                # ✅ Child group (linked to parent)
-                if not frappe.db.exists("Assessment Group", group_name):
-                    frappe.get_doc({
-                        "doctype": "Assessment Group",
-                        "assessment_group_name": group_name,
-                        "is_group": 0,
-                        "parent_assessment_group": parent_name
-                    }).insert(ignore_permissions=True)
-
-                # ✅ Create assessment criteria
-                for crit in criteria_list:
-                    crit_name = crit.get("assessmentCriteria")
-
-                    if not crit_name:
-                        continue
-
-                    # Skip duplicates
-                    if frappe.db.exists(
-                        "Assessment Criteria",
-                        {
-                            "assessment_criteria": crit_name,
-                            "assessment_criteria_group": group_name
-                        }
-                    ):
-                        continue
-
-                    frappe.get_doc({
-                        "doctype": "Assessment Criteria",
-                        "assessment_criteria": crit_name,
-                        "assessment_criteria_group": group_name
-                    }).insert(ignore_permissions=True)
-
-        frappe.db.commit()
-        return {"status": "success"}
-
-    except Exception as e:
-        frappe.log_error(f"save_assessment_structure error: {str(e)}", "Assessment Structure Error")
-        return {"status": "failed", "message": str(e)}
-
-@frappe.whitelist()
 def create_program_and_groups_with_courses(values):
     if "Administrator" not in frappe.get_roles(frappe.session.user):
         frappe.throw("You are not authorized to perform this action.")
 
     try:
-        # Resolve grading scale based on 3 scenarios
         grading_system = values.get("gradingSystem")
         resolved_grading_scale = resolve_grading_scale(grading_system)
 
-        classes = values.get("classes")
+        classes = values.get("classes", [])
         academic_year_name = values.get("academicYear")
-        dont_create_classes = values.get("dontCreateClasses", False)
+        set_as_current = bool(values.get("setAsCurrent"))
+
+        if not classes:
+            return {"status": "success", "message": "No classes provided, skipping program creation."}
 
         for class_info in classes:
             class_name = class_info.get("className")
@@ -438,47 +632,35 @@ def create_program_and_groups_with_courses(values):
             divisions = class_info.get("divisions", [])
 
             program_exists = frappe.db.exists("Program", {"program_name": class_name})
-            program_doc = None
 
-            # Create program only if not skipping
-            if not dont_create_classes and not program_exists:
-                program_doc = frappe.new_doc("Program")
-                program_doc.program_name = class_name
-
-                if not class_subjects:
-                    frappe.log_error(
-                        f"No subjects for class {class_name}. Skipping program creation.",
-                        "Program Creation Error"
-                    )
-                    continue
-
-                for subject in class_subjects:
-                    subject_name = f"{subject} ({class_name})"
-
-                    # Create course with default grading scale attached
-                    if not frappe.db.exists("Course", {"course_name": subject_name}):
-                        course_doc = frappe.new_doc("Course")
-                        course_doc.course_name = subject_name
-                        course_doc.default_grading_scale = resolved_grading_scale
-                        course_doc.save(ignore_permissions=True)
-
-                    program_course = program_doc.append("courses", {})
-                    program_course.course = subject_name
-                    program_course.course_name = subject
-
-                program_doc.save(ignore_permissions=True)
-
-            # Ensure course exists even when program exists
+            # Create courses first (regardless of whether program exists)
             for subject in class_subjects:
                 subject_name = f"{subject} ({class_name})"
-
+                
                 if not frappe.db.exists("Course", {"course_name": subject_name}):
                     course_doc = frappe.new_doc("Course")
                     course_doc.course_name = subject_name
                     course_doc.default_grading_scale = resolved_grading_scale
                     course_doc.save(ignore_permissions=True)
 
-            # Create batch + student groups
+            # Create program if it doesn't exist
+            if not program_exists and class_subjects:
+                try:
+                    program_doc = frappe.new_doc("Program")
+                    program_doc.program_name = class_name
+
+                    for subject in class_subjects:
+                        subject_name = f"{subject} ({class_name})"
+                        program_course = program_doc.append("courses", {})
+                        program_course.course = subject_name
+                        program_course.course_name = subject
+
+                    program_doc.save(ignore_permissions=True)
+
+                except Exception:
+                    continue
+
+            # Create student groups
             for division_info in divisions:
                 division_name = division_info.get("divisionName")
                 student_group_name = f"{division_name} ({academic_year_name})"
@@ -494,6 +676,9 @@ def create_program_and_groups_with_courses(values):
                     student_group_doc.program = class_name
                     student_group_doc.group_based_on = "Batch"
                     student_group_doc.academic_year = academic_year_name
+                    if not set_as_current:
+                        first_term = get_first_academic_term(academic_year_name)
+                        student_group_doc.academic_term = first_term
                     student_group_doc.batch = student_group_name
                     student_group_doc.save(ignore_permissions=True)
 
@@ -503,6 +688,35 @@ def create_program_and_groups_with_courses(values):
     except Exception as e:
         frappe.log_error(f"Error in create_program_and_groups_with_courses: {str(e)}", "Setup Error")
         return {"status": "failed", "message": f"An error occurred: {str(e)}"}
+
+
+def get_first_academic_term(academic_year):
+    """
+    Get the first academic term for the given academic year
+    Returns the first term based on term_start_date
+    """
+    try:
+        terms = frappe.get_all(
+            "Academic Term",
+            filters={
+                "academic_year": academic_year
+            },
+            fields=["name", "term_name", "term_start_date"],
+            order_by="term_start_date asc",
+            limit=1
+        )
+        
+        if terms:
+            return terms[0].name
+        else:
+            any_term = frappe.db.get_value("Academic Term", 
+                filters={"academic_year": academic_year},
+                order_by="creation asc"
+            )
+            return any_term
+            
+    except Exception:
+        return None
 
 def resolve_grading_scale(grading_system):
     """
@@ -554,17 +768,7 @@ def resolve_grading_scale(grading_system):
 
         # Save it
         scale_doc.save(ignore_permissions=True)
-
-        # Submit ONLY IF doctype is submittable
-        try:
-            if getattr(scale_doc.meta, "is_submittable", 0):
-                scale_doc.submit()
-        except Exception as submit_err:
-            frappe.log_error(
-                f"Failed to submit grading scale {scale_name}: {submit_err}",
-                "Grading Scale Submit Error"
-            )
-
+        scale_doc.submit()
         return scale_name
 
     # Unknown case
@@ -572,7 +776,7 @@ def resolve_grading_scale(grading_system):
 
 
 @frappe.whitelist()
-def set_academic_details(academic_year_name, year_start_date, year_end_date, terms, selected_term):
+def set_academic_details(academic_year_name, year_start_date, year_end_date, terms, selected_term, set_as_current):
     if "Administrator" not in frappe.get_roles(frappe.session.user):
         frappe.throw("You are not authorized to perform this action.")
     try:
@@ -601,7 +805,7 @@ def set_academic_details(academic_year_name, year_start_date, year_end_date, ter
             term_doc.insert(ignore_permissions=True)
             term_doc.save()
         
-        if selected_term:
+        if set_as_current:
          # Update Education Settings with the selected term
             formatted_current_term = f"{academic_year_name} ({selected_term})"
             edu_settings = frappe.get_single("Education Settings")
@@ -1657,3 +1861,86 @@ def bulk_enroll_instructors(teachers):
 
     frappe.db.commit()
     frappe.msgprint(f"🎉 Bulk enrollment completed: {success_count}/{total_count} instructors enrolled successfully")
+
+
+@frappe.whitelist()
+def save_assessment_structure(payload):
+    try:
+        structure = payload.get("assessmentStructure", {})
+        root_groups = structure.get("assessmentGroups", [])
+
+        if not root_groups:
+            return {"status": "failed", "message": "No assessment groups provided."}
+
+        # ✅ Ensure master root exists
+        ROOT = "All Assessment Groups"
+        if not frappe.db.exists("Assessment Group", ROOT):
+            frappe.get_doc({
+                "doctype": "Assessment Group",
+                "assessment_group": ROOT,
+                "is_group": 1
+            }).insert(ignore_permissions=True)
+
+        for parent in root_groups:
+
+            parent_name = parent.get("assessmentGroupParentName")
+            child_groups = parent.get("assessmentGroups", [])
+
+            if not parent_name:
+                continue
+
+            # ✅ Parent group (forced under "All Assessment Groups")
+            if not frappe.db.exists("Assessment Group", parent_name):
+                frappe.get_doc({
+                    "doctype": "Assessment Group",
+                    "assessment_group_name": parent_name,
+                    "is_group": 1,
+                    "parent_assessment_group": ROOT
+                }).insert(ignore_permissions=True)
+
+            # ✅ Process child groups
+            for child in child_groups:
+                group_name = child.get("assessmentGroup")
+                criteria_list = child.get("assessmentCriteria", [])
+
+                if not group_name:
+                    continue
+
+                # ✅ Child group (linked to parent)
+                if not frappe.db.exists("Assessment Group", group_name):
+                    frappe.get_doc({
+                        "doctype": "Assessment Group",
+                        "assessment_group_name": group_name,
+                        "is_group": 0,
+                        "parent_assessment_group": parent_name
+                    }).insert(ignore_permissions=True)
+
+                # ✅ Create assessment criteria
+                for crit in criteria_list:
+                    crit_name = crit.get("assessmentCriteria")
+
+                    if not crit_name:
+                        continue
+
+                    # Skip duplicates
+                    if frappe.db.exists(
+                        "Assessment Criteria",
+                        {
+                            "assessment_criteria": crit_name,
+                            "assessment_criteria_group": group_name
+                        }
+                    ):
+                        continue
+
+                    frappe.get_doc({
+                        "doctype": "Assessment Criteria",
+                        "assessment_criteria": crit_name,
+                        "assessment_criteria_group": group_name
+                    }).insert(ignore_permissions=True)
+
+        frappe.db.commit()
+        return {"status": "success"}
+
+    except Exception as e:
+        frappe.log_error(f"save_assessment_structure error: {str(e)}", "Assessment Structure Error")
+        return {"status": "failed", "message": str(e)}

@@ -79,8 +79,8 @@
         </div>
       </div>
 
-      <!-- Current Term Selection -->
-      <div class="form-row">
+      <!-- Current Term Selection - Conditionally Rendered -->
+      <div class="form-row" v-if="setAsCurrent">
         <div class="form-group full-width">
           <label class="form-label">Current Academic Term</label>
           <select 
@@ -97,6 +97,20 @@
               {{ term.name }} ({{ formatDate(term.startDate) }} - {{ formatDate(term.endDate) }})
             </option>
           </select>
+        </div>
+      </div>
+
+      <!-- Set as Current Academic Year Checkbox -->
+      <div class="form-row">
+        <div class="form-group full-width">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              v-model="setAsCurrent"
+              @change="updateField('setAsCurrent', $event.target.checked)"
+            />
+            Set as Current Academic Year
+          </label>
         </div>
       </div>
     </div>
@@ -179,6 +193,14 @@ export default {
     };
   },
   computed: {
+    setAsCurrent: {
+      get() {
+        return this.values.setAsCurrent || false;
+      },
+      set(value) {
+        this.$emit('update-field', { field: 'setAsCurrent', value });
+      }
+    },
     academicYear: {
       get() {
         return this.values.academicYear;

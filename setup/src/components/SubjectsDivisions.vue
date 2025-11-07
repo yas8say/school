@@ -1,8 +1,72 @@
 <template>
   <div class="bg-white shadow rounded-lg p-6 space-y-6">
+    <!-- Institution Type Picker -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">Institution Type</label>
+      <div class="flex space-x-4">
+        <button
+          @click="setInstitutionType('school')"
+          class="px-4 py-2 rounded-md transition-colors"
+          :class="institutionType === 'school' 
+            ? 'bg-blue-500 text-white shadow-md' 
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+        >
+          🏫 School
+        </button>
+        <button
+          @click="setInstitutionType('college')"
+          class="px-4 py-2 rounded-md transition-colors"
+          :class="institutionType === 'college' 
+            ? 'bg-blue-500 text-white shadow-md' 
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+        >
+          🎓 College
+        </button>
+      </div>
+    </div>
+
+    <!-- College Division Picker (Visible only for College) -->
+    <div v-if="institutionType === 'college'" class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">College Division</label>
+      <select 
+        v-model="selectedCollegeDivision"
+        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        <option value="">Select a division...</option>
+        <option 
+          v-for="division in collegeDivisionsList" 
+          :key="division"
+          :value="division"
+        >
+          {{ division }}
+        </option>
+      </select>
+      
+      <!-- Quick Select College Divisions -->
+      <div class="quick-select mt-3" v-if="selectedCollegeDivision">
+        <h3 class="text-sm font-medium text-gray-700 mb-2">Quick Select {{ selectedCollegeDivision }} Subjects</h3>
+        <div class="subject-grid grid grid-cols-3 gap-2">
+          <div 
+            v-for="subject in getCollegeSubjects(selectedCollegeDivision)" 
+            :key="subject"
+            class="subject-card px-3 py-2 border rounded-md text-center cursor-pointer text-sm"
+            :class="{ 
+              'bg-purple-100 border-purple-300': isCommonSubjectSelected(subject),
+              'bg-gray-50 hover:bg-gray-100': !isCommonSubjectSelected(subject)
+            }"
+            @click="toggleCommonSubject(subject)"
+          >
+            {{ subject }}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Global Subject Input -->
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Common Subjects for All Classes</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        {{ institutionType === 'college' ? 'Common Courses for All Programs' : 'Common Subjects for All Classes' }}
+      </label>
       <div class="flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-md min-h-[42px]">
         <span 
           v-for="(subject, idx) in commonSubjectsList" 
@@ -22,13 +86,13 @@
           v-model="newCommonSubject"
           @keydown.enter="addCommonSubject"
           @blur="addCommonSubject"
-          placeholder="Add subjects..."
+          :placeholder="institutionType === 'college' ? 'Add courses...' : 'Add subjects...'"
           class="flex-1 min-w-[100px] px-2 py-1 border-0 focus:ring-0 focus:outline-none"
         />
       </div>
 
       <!-- Quick Select Subjects Widget -->
-      <div class="quick-select mt-3">
+      <div class="quick-select mt-3" v-if="institutionType === 'school'">
         <h3 class="text-sm font-medium text-gray-700 mb-2">Quick Select Subjects</h3>
         <div class="subject-grid grid grid-cols-3 gap-2">
           <div 
@@ -49,7 +113,9 @@
 
     <!-- Global Division Input -->
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Common Divisions for All Classes</label>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        {{ institutionType === 'college' ? 'Common Programs for All Classes' : 'Common Divisions for All Classes' }}
+      </label>
       <div class="flex flex-wrap items-center gap-2 p-2 border border-gray-300 rounded-md min-h-[42px]">
         <span 
           v-for="(division, idx) in commonDivisionsList" 
@@ -69,17 +135,19 @@
           v-model="newCommonDivision"
           @keydown.enter="addCommonDivision"
           @blur="addCommonDivision"
-          placeholder="Add divisions..."
+          :placeholder="institutionType === 'college' ? 'Add programs...' : 'Add divisions...'"
           class="flex-1 min-w-[100px] px-2 py-1 border-0 focus:ring-0 focus:outline-none"
         />
       </div>
 
       <!-- Quick Select Divisions Widget -->
       <div class="quick-select mt-3">
-        <h3 class="text-sm font-medium text-gray-700 mb-2">Quick Select Divisions</h3>
+        <h3 class="text-sm font-medium text-gray-700 mb-2">
+          {{ institutionType === 'college' ? 'Quick Select Programs' : 'Quick Select Divisions' }}
+        </h3>
         <div class="division-grid grid grid-cols-6 gap-2">
           <div 
-            v-for="division in commonDivisions" 
+            v-for="division in getDivisionOptions()" 
             :key="division"
             class="division-card px-3 py-2 border rounded-md text-center cursor-pointer text-sm"
             :class="{ 
@@ -95,7 +163,9 @@
     </div>
 
     <!-- Classes Overview -->
-    <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Classes Overview</h3>
+    <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">
+      {{ institutionType === 'college' ? 'Programs Overview' : 'Classes Overview' }}
+    </h3>
 
     <!-- Responsive Table -->
     <div class="overflow-x-auto">
@@ -103,9 +173,15 @@
         <thead class="bg-gray-100">
           <tr>
             <th class="px-4 py-2 font-medium">#</th>
-            <th class="px-4 py-2 font-medium">Class Name / Programs</th>
-            <th class="px-4 py-2 font-medium">Subjects / Courses</th>
-            <th class="px-4 py-2 font-medium">Divisions / Student Groups</th>
+            <th class="px-4 py-2 font-medium">
+              {{ institutionType === 'college' ? 'Program Name' : 'Class Name' }}
+            </th>
+            <th class="px-4 py-2 font-medium">
+              {{ institutionType === 'college' ? 'Courses' : 'Subjects' }}
+            </th>
+            <th class="px-4 py-2 font-medium">
+              {{ institutionType === 'college' ? 'Student Groups' : 'Divisions' }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -121,6 +197,7 @@
                 v-model="cls.className"
                 @input="updateClassName(index, $event.target.value)"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                :placeholder="institutionType === 'college' ? 'Program name...' : 'Class name...'"
               />
             </td>
             <td class="px-4 py-2 w-[300px]">
@@ -162,7 +239,7 @@
                   type="text"
                   v-model="cls.subjectsText"
                   @keydown.enter="addSpecificSubject(index)"
-                  placeholder="Add class-specific subject..."
+                  :placeholder="institutionType === 'college' ? 'Add program-specific course...' : 'Add class-specific subject...'"
                   class="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
                 />
                 <button
@@ -212,7 +289,7 @@
                   type="text"
                   v-model="cls.divisionsText"
                   @keydown.enter="addSpecificDivision(index)"
-                  placeholder="Add class-specific division..."
+                  :placeholder="institutionType === 'college' ? 'Add program-specific group...' : 'Add class-specific division...'"
                   class="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
                 />
                 <button
@@ -237,11 +314,15 @@ export default {
   },
   data() {
     return {
+      institutionType: 'school', // Default to school
+      selectedCollegeDivision: '',
       newCommonSubject: '',
       newCommonDivision: '',
       commonSubjectsList: [],
       commonDivisionsList: [],
       classesWithText: [],
+      
+      // School subjects
       commonSubjects: [
         'Math', 'Social Studies', 'Science', 'English',
         'History', 'Geography', 'Physics',
@@ -249,9 +330,113 @@ export default {
         'Civics', 'Hindi', 'Marathi',
         'Arabic', 'Play'
       ],
-      commonDivisions: [
-        'A', 'B', 'C', 'D', 'E', 'F'
+      
+      // School divisions
+      commonDivisions: ['A', 'B', 'C', 'D', 'E', 'F'],
+      
+      // College data structure
+      collegeDivisions: {
+        "Computer Science": [
+          "Data Structures", "Algorithms", "Operating Systems", "Computer Networks", 
+          "Database Management Systems", "Object-Oriented Programming", "Software Engineering", 
+          "Web Development", "Theory of Computation", "Artificial Intelligence", 
+          "Machine Learning", "Cyber Security", "Cloud Computing"
+        ],
+        "Computer Applications": [
+          "C Programming", "Data Structures", "Database Management", "Web Programming", 
+          "Computer Architecture", "Operating Systems", "Java Programming", 
+          "Python Programming", "Software Engineering", "Computer Networks", 
+          "Mobile App Development"
+        ],
+        "Information Technology": [
+          "Web Technology", "Network Security", "Database Systems", "Cloud Services", 
+          "IT Project Management", "Data Analytics", "Software Testing", 
+          "System Administration", "E-Commerce Systems"
+        ],
+        "Electronics": [
+          "Basic Electronics", "Digital Electronics", "Microprocessors", "Embedded Systems", 
+          "Circuit Theory", "VLSI Design", "Communication Systems", "Sensors and Instrumentation"
+        ],
+        "Mechanical Engineering": [
+          "Engineering Mechanics", "Thermodynamics", "Fluid Mechanics", "Strength of Materials", 
+          "Manufacturing Processes", "Machine Design", "Heat Transfer", "CAD/CAM"
+        ],
+        "Civil Engineering": [
+          "Engineering Drawing", "Surveying", "Structural Engineering", "Concrete Technology", 
+          "Soil Mechanics", "Transportation Engineering", "Construction Management", 
+          "Environmental Engineering"
+        ],
+        "Electrical Engineering": [
+          "Electrical Circuits", "Power Systems", "Control Systems", "Electrical Machines", 
+          "Power Electronics", "Renewable Energy", "High Voltage Engineering"
+        ],
+        "Business Administration": [
+          "Principles of Management", "Marketing Management", "Financial Management", 
+          "Business Law", "Organizational Behaviour", "Human Resource Management", 
+          "Accounting", "Entrepreneurship", "Business Communication"
+        ],
+        "Commerce": [
+          "Accountancy", "Business Economics", "Cost Accounting", "Auditing", 
+          "Taxation", "Business Law", "Statistics", "Financial Accounting"
+        ],
+        "Accounting and Finance": [
+          "Financial Accounting", "Cost Accounting", "Taxation", "Statistics for Finance", 
+          "Corporate Finance", "Banking and Insurance Fundamentals"
+        ],
+        "Banking and Insurance": [
+          "Banking Operations", "Financial Markets", "Insurance Fundamentals", 
+          "Risk Management", "Commercial Banking", "Customer Relationship Management"
+        ],
+        "Physics": [
+          "Mechanics", "Electricity and Magnetism", "Optics", "Quantum Physics", 
+          "Thermodynamics", "Nuclear Physics", "Basic Electronics"
+        ],
+        "Chemistry": [
+          "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry", 
+          "Analytical Techniques", "Environmental Chemistry"
+        ],
+        "Mathematics": [
+          "Calculus", "Algebra", "Differential Equations", "Probability and Statistics", 
+          "Real Analysis", "Linear Algebra", "Discrete Mathematics"
+        ],
+        "Biotechnology": [
+          "Cell Biology", "Genetics", "Microbiology", "Biochemistry", 
+          "Molecular Biology", "Immunology", "Genetic Engineering"
+        ],
+        "Microbiology": [
+          "General Microbiology", "Environmental Microbiology", "Food Microbiology", 
+          "Medical Microbiology", "Industrial Microbiology"
+        ],
+        "Psychology": [
+          "Introduction to Psychology", "Cognitive Psychology", "Developmental Psychology", 
+          "Abnormal Psychology", "Social Psychology", "Research Methods"
+        ],
+        "Economics": [
+          "Microeconomics", "Macroeconomics", "Indian Economy", "Econometrics", 
+          "Public Finance", "International Economics"
+        ],
+        "English Literature": [
+          "Poetry", "Drama", "Novels", "Literary Theory", 
+          "Indian Writing in English", "Linguistics", "Modern Literature"
+        ]
+      },
+      
+      collegeDivisionsList: [
+        "Computer Science", "Computer Applications", "Information Technology", 
+        "Electronics", "Mechanical Engineering", "Civil Engineering", 
+        "Electrical Engineering", "Business Administration", "Commerce", 
+        "Accounting & Finance", "Banking & Insurance", "Physics", 
+        "Chemistry", "Mathematics", "Biotechnology", "Microbiology", 
+        "Psychology", "Economics", "English Literature"
       ]
+    }
+  },
+  computed: {
+    collegeCommonSubjects() {
+      if (this.selectedCollegeDivision && this.collegeDivisions[this.selectedCollegeDivision]) {
+        return this.collegeDivisions[this.selectedCollegeDivision];
+      }
+      return [];
     }
   },
   created() {
@@ -261,6 +446,9 @@ export default {
     }
     if (this.values.commonDivisions) {
       this.commonDivisionsList = [...this.values.commonDivisions];
+    }
+    if (this.values.institutionType) {
+      this.institutionType = this.values.institutionType;
     }
   },
   watch: {
@@ -310,9 +498,35 @@ export default {
         this.updateAllClassesWithCommonData();
       },
       deep: true
+    },
+    institutionType: {
+      handler(newVal) {
+        this.$emit('update-field', {
+          field: 'institutionType',
+          value: newVal
+        });
+        // Clear college-specific selection when switching to school
+        if (newVal === 'school') {
+          this.selectedCollegeDivision = '';
+        }
+      }
     }
   },
   methods: {
+    // Institution Type Methods
+    setInstitutionType(type) {
+      this.institutionType = type;
+    },
+
+    // College Methods
+    getCollegeSubjects(division) {
+      return this.collegeDivisions[division] || [];
+    },
+
+    getDivisionOptions() {
+      return this.institutionType === 'college' ? this.collegeDivisionsList : this.commonDivisions;
+    },
+
     // Common Subjects Methods
     addCommonSubject() {
       if (this.newCommonSubject.trim() && !this.commonSubjectsList.includes(this.newCommonSubject.trim())) {

@@ -90,10 +90,33 @@ const PROGRAM_OPTIONS = {
     "6th", "7th", "8th", "9th", "10th", "11th", "12th"
   ],
   college: [
-    "FY BSc", "SY BSc", "TY BSc", "FY BCA", "SY BCA", "TY BCA",
-    "FY BTech", "SY BTech", "TY BTech", "Final Year BTech",
-    "FY BCom", "SY BCom", "TY BCom", "MBA"
+    // Bachelors (3)
+    "FY Bachelors",
+    "SY Bachelors",
+    "TY Bachelors",
+
+    //Diploma
+    "FY Diploma",
+    "SY Diploma",
+
+    // BTech (Engineering – 4 years)
+    "FY BTech",
+    "SY BTech",
+    "TY BTech",
+    "Final Year BTech",
+
+    // Masters (2 years)
+    "FY Masters",
+    "SY Masters",
+
+    // PhD (variable duration)
+    "PhD Year 1",
+    "PhD Year 2",
+    "PhD Year 3",
+    "PhD Year 4",
+    "PhD Year 5"
   ]
+
 };
 
 export default {

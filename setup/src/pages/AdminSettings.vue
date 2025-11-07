@@ -53,6 +53,67 @@
             </div>
           </div>
 
+          <!-- Allow Students Promotion for Instructors -->
+          <div class="mb-8">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg font-medium text-gray-800 mb-2">
+                  Allow Students Promotion for Instructors
+                </h3>
+                <p class="text-gray-600 text-sm">
+                  When enabled, instructors will have permission to promote students to the next academic year
+                </p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="settings.allow_students_promotion_for_instructors"
+                  class="sr-only peer"
+                >
+                <div class="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Next Academic Year Picker -->
+          <div class="mb-8" v-if="settings.allow_students_promotion_for_instructors">
+            <label for="next_academic_year" class="block text-lg font-medium text-gray-800 mb-2">
+              Next Academic Year
+            </label>
+            <p class="text-gray-600 text-sm mb-4">
+              Select the academic year that will be used for student promotions
+            </p>
+            <select
+              id="next_academic_year"
+              v-model="settings.next_academic_year"
+              class="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              :disabled="academicYearsLoading"
+            >
+              <option value="" disabled>Select Academic Year</option>
+              <option 
+                v-for="year in academicYears" 
+                :key="year.name" 
+                :value="year.name"
+              >
+                {{ year.academic_year_name || year.name }}
+              </option>
+            </select>
+            <div v-if="academicYearsLoading" class="mt-2 text-sm text-gray-600">
+              Loading academic years...
+            </div>
+            <div v-else-if="academicYears.length === 0" class="mt-2 text-sm text-yellow-600">
+              No academic years available. Please contact administrator.
+            </div>
+            
+            <!-- Show current next academic year value -->
+            <div v-if="originalSettings.next_academic_year" class="mt-3 p-3 bg-blue-50 rounded-lg">
+              <p class="text-sm text-blue-700">
+                <span class="font-medium">Current setting:</span> 
+                {{ getAcademicYearName(originalSettings.next_academic_year) }}
+              </p>
+            </div>
+          </div>
+
           <!-- Session Expiry -->
           <div class="mb-8">
             <label for="session_expiry" class="block text-lg font-medium text-gray-800 mb-2">
@@ -198,6 +259,8 @@ import { createResource } from 'frappe-ui'
 // Default settings
 const defaultSettings = {
   allow_instructors_modify_student: false,
+  allow_students_promotion_for_instructors: false,
+  next_academic_year: '',
   session_expiry: '24:00' // HH:MM format
 }
 
@@ -205,6 +268,8 @@ const defaultSettings = {
 const settings = reactive({ ...defaultSettings })
 const originalSettings = ref({ ...defaultSettings })
 const originalSessionExpiryFormat = ref('')
+const academicYears = ref([])
+const academicYearsLoading = ref(false)
 const hours = ref(24)
 const minutes = ref(0)
 const loading = ref(true)
@@ -212,6 +277,22 @@ const loadError = ref('')
 const saving = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
+
+// API Resources
+const academicYearsResource = createResource({
+  url: 'school.al_ummah.api3.get_next_academic_years',
+  params: { values: {} },
+  onSuccess: (data) => {
+    academicYears.value = Array.isArray(data) ? data : [];
+    academicYearsLoading.value = false;
+  },
+  onError: (err) => {
+    console.error('Error fetching academic years:', err);
+    academicYears.value = [];
+    academicYearsLoading.value = false;
+    showMessage(`Error fetching academic years: ${err.messages?.[0] || 'Unknown error'}`, 'error');
+  }
+});
 
 // Convert HH:MM to hours and minutes
 const parseTimeFormat = (timeString) => {
@@ -234,9 +315,17 @@ const totalHours = computed(() => {
 const hasChanges = computed(() => {
   return (
     settings.allow_instructors_modify_student !== originalSettings.value.allow_instructors_modify_student ||
+    settings.allow_students_promotion_for_instructors !== originalSettings.value.allow_students_promotion_for_instructors ||
+    settings.next_academic_year !== originalSettings.value.next_academic_year ||
     settings.session_expiry !== originalSettings.value.session_expiry
   )
 })
+
+// Get academic year display name
+const getAcademicYearName = (yearName) => {
+  const year = academicYears.value.find(ay => ay.name === yearName)
+  return year ? (year.academic_year_name || year.name) : yearName
+}
 
 // Format duration for display
 const formatDuration = (hours) => {
@@ -274,14 +363,31 @@ const setPreset = (h, m) => {
   minutes.value = m
 }
 
+// Show message helper function
+const showMessage = (message, type = 'info') => {
+  if (type === 'error') {
+    errorMessage.value = message
+    setTimeout(() => {
+      errorMessage.value = ''
+    }, 5000)
+  } else {
+    successMessage.value = message
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 5000)
+  }
+}
+
 // Create resource for fetching settings
 const fetchSettingsResource = createResource({
   url: 'school.al_ummah.api3.fetch_admin_settings',
   onSuccess(data) {
     console.log('Settings fetched successfully:', data)
     
-    // Update settings with fetched values
+    // Update settings with fetched values (convert from int to boolean)
     settings.allow_instructors_modify_student = data.allow_instructors_modify_student === 1
+    settings.allow_students_promotion_for_instructors = data.allow_students_promotion_for_instructors === 1
+    settings.next_academic_year = data.next_academic_year || ''
     
     // Handle session expiry format (e.g., "170:00")
     if (data.session_expiry) {
@@ -355,6 +461,12 @@ const handleSaveSettings = async () => {
     return
   }
 
+  // Validate next academic year if promotion is enabled
+  if (settings.allow_students_promotion_for_instructors && !settings.next_academic_year) {
+    errorMessage.value = 'Please select a next academic year when allowing student promotion.'
+    return
+  }
+
   saving.value = true
   successMessage.value = ''
   errorMessage.value = ''
@@ -362,6 +474,8 @@ const handleSaveSettings = async () => {
   try {
     await saveSettingsResource.submit({
       allow_instructors_modify_student: settings.allow_instructors_modify_student,
+      allow_students_promotion_for_instructors: settings.allow_students_promotion_for_instructors,
+      next_academic_year: settings.next_academic_year,
       session_expiry: settings.session_expiry // Send in HH:MM format
     })
   } catch (error) {
@@ -391,6 +505,8 @@ const retryLoadSettings = () => {
 // Load existing settings when component mounts
 onMounted(() => {
   console.log('Admin Settings component mounted, fetching settings...')
+  academicYearsLoading.value = true
+  academicYearsResource.submit()
   fetchSettingsResource.submit()
 })
 </script>
