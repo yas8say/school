@@ -190,7 +190,7 @@
           <div v-if="allowInstructorsModify">
             <label class="block text-sm font-medium text-gray-700 mb-2">GR Number</label>
             <input 
-              v-model="studentInfo.gr_number"
+              v-model="studentInfo.name"
               type="text" 
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -591,7 +591,7 @@ const studentInfo = reactive({
   middle_name: '',
   last_name: '',
   student_date_of_birth: '',
-  gr_number: '',
+  name: '',
   email_address: '',
   phone_number: '',
   roll_number: '',
@@ -956,7 +956,7 @@ const updateStudent = async (event) => {
       middle_name: studentInfo.middle_name || '',
       last_name: studentInfo.last_name || '',
       student_date_of_birth: studentInfo.student_date_of_birth || '',
-      gr_number: studentInfo.gr_number || '',
+      name: studentInfo.name || '',
       email_address: studentInfo.email_address || '',
       phone_number: studentInfo.phone_number || '',
       roll_number: studentInfo.roll_number || ''

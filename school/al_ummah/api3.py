@@ -485,60 +485,87 @@ def quick_setup(values):
 
 def create_fee_structures_and_categories(values):
     """
-    Create Fee Structures and Fee Categories for all programs without duplicates
+    Create Fee Structures and Fee Categories for all programs with multiple structures
     """
     try:
         fee_structures_data = values.get("feeStructures", [])
         classes = values.get("classes", [])
         academic_year = values.get("academicYear")
-        
+        set_as_current = bool(values.get("setAsCurrent"))
+
         if not fee_structures_data or not classes:
             print("No fee structures data or classes found")
             return
         
         print(f"Creating fee structures for {len(classes)} classes...")
         
-        for i, cls in enumerate(classes):
+        for class_index, cls in enumerate(classes):
             program_name = cls.get("className")
-            fee_components = fee_structures_data[i].get("components", []) if i < len(fee_structures_data) else []
             
-            if not program_name or not fee_components:
-                print(f"Skipping fee structure for {program_name} - no components")
+            # Get all fee structures for this class (multiple structures per program)
+            class_structures = fee_structures_data[class_index] if class_index < len(fee_structures_data) else []
+            
+            if not program_name or not class_structures:
+                print(f"Skipping fee structures for {program_name} - no structures found")
                 continue
             
-            # Create or get Fee Structure
-            fee_structure_name = create_fee_structure(program_name, academic_year, fee_components)
+            print(f"Creating {len(class_structures)} fee structures for {program_name}")
             
-            if fee_structure_name:
-                print(f"✅ Created/Updated Fee Structure: {fee_structure_name}")
-            else:
-                print(f"❌ Failed to create fee structure for {program_name}")
+            # Create multiple fee structures for this program
+            for structure_index, structure_data in enumerate(class_structures):
+                structure_name = structure_data.get("name")
+                frequency = structure_data.get("frequency")
+                fee_components = structure_data.get("components", [])
+                
+                if not fee_components:
+                    print(f"Skipping {structure_name} for {program_name} - no components")
+                    continue
+                
+                # Create Fee Structure with frequency in name
+                fee_structure_name = create_fee_structure(
+                    program_name=program_name,
+                    academic_year=academic_year,
+                    fee_components=fee_components,
+                    structure_name=structure_name,
+                    frequency=frequency,
+                    set_as_current=set_as_current
+                )
+                
+                if fee_structure_name:
+                    print(f"✅ Created Fee Structure: {fee_structure_name}")
+                else:
+                    print(f"❌ Failed to create fee structure {structure_name} for {program_name}")
         
-        print("✅ Fee structure creation completed")
+        print("✅ All fee structures creation completed")
         
     except Exception as e:
         print(f"❌ Error in create_fee_structures_and_categories: {str(e)}")
         frappe.log_error(f"Error creating fee structures: {str(e)}", "Fee Structure Creation Error")
         raise
 
-def create_fee_structure(program_name, academic_year, fee_components):
+def create_fee_structure(program_name, academic_year, fee_components, structure_name, frequency, set_as_current):
     """
-    Create or update a Fee Structure for a program
+    Create or update a Fee Structure for a program with specific frequency
     """
     try:
-        # Generate fee structure name
-        fee_structure_name = f"{program_name} - {academic_year}"
+        # Generate unique fee structure name with frequency
+        fee_structure_name = f"{program_name} - {structure_name} - {academic_year}"
         
         # Check if fee structure already exists
         if frappe.db.exists("Fee Structure", fee_structure_name):
             print(f"⚠️ Fee Structure {fee_structure_name} already exists, updating...")
             fee_structure = frappe.get_doc("Fee Structure", fee_structure_name)
+            is_new = False
         else:
             # Create new Fee Structure
             fee_structure = frappe.new_doc("Fee Structure")
             fee_structure.program = program_name
             fee_structure.academic_year = academic_year
-            fee_structure.fee_structure_name = fee_structure_name
+            if not set_as_current:
+                first_term = get_first_academic_term(academic_year)
+                fee_structure.academic_term = first_term
+                
+            is_new = True
         
         # Calculate total amount
         total_amount = sum(comp.get("amount", 0) for comp in fee_components)
@@ -565,16 +592,24 @@ def create_fee_structure(program_name, academic_year, fee_components):
                 "total": comp.get("total", comp.get("amount", 0))
             })
         
-        # Save and submit
+        # Save and submit FIRST
         fee_structure.save()
         
-        if fee_structure.docstatus == 0:  # Only submit if not already submitted
+        if fee_structure.docstatus == 0:
             fee_structure.submit()
         
-        return fee_structure.name
+        # Only rename if it's a new document (AFTER all operations)
+        if is_new:
+            auto_name = fee_structure.name
+            print(f"📝 Renaming {auto_name} to {fee_structure_name}")
+            frappe.rename_doc("Fee Structure", auto_name, fee_structure_name, force=True)
+            # Don't reload or use the document after rename
+        
+        print(f"✅ Created/Updated Fee Structure: {fee_structure_name}")
+        return fee_structure_name
         
     except Exception as e:
-        print(f"❌ Error creating fee structure for {program_name}: {str(e)}")
+        print(f"❌ Error creating fee structure {structure_name} for {program_name}: {str(e)}")
         frappe.log_error(f"Error creating fee structure {program_name}: {str(e)}")
         return None
 
@@ -609,6 +644,46 @@ def create_fee_category(category_name):
         print(f"❌ Error creating fee category {category_name}: {str(e)}")
         # Don't raise error for category creation - it might already exist
         return None
+
+def get_fee_structures_for_program(program_name, academic_year):
+    """
+    Get all fee structures for a program (for verification)
+    """
+    try:
+        fee_structures = frappe.get_all(
+            "Fee Structure",
+            filters={
+                "program": program_name,
+                "academic_year": academic_year
+            },
+            fields=["name", "fee_structure_name", "total_amount", "description"]
+        )
+        
+        structures_with_components = []
+        for fs in fee_structures:
+            structure_doc = frappe.get_doc("Fee Structure", fs.name)
+            components = []
+            for comp in structure_doc.components:
+                components.append({
+                    "fees_category": comp.fees_category,
+                    "amount": comp.amount,
+                    "discount": comp.discount,
+                    "total": comp.total
+                })
+            
+            structures_with_components.append({
+                "name": fs.name,
+                "fee_structure_name": fs.fee_structure_name,
+                "total_amount": fs.total_amount,
+                "description": fs.description,
+                "components": components
+            })
+        
+        return structures_with_components
+        
+    except Exception as e:
+        print(f"Error getting fee structures for {program_name}: {str(e)}")
+        return []
 
 @frappe.whitelist()
 def create_program_and_groups_with_courses(values):
@@ -882,9 +957,9 @@ def safe_int(val):
         return float('inf')
 
 
-def generate_unique_email(first_name, last_name, gr_number):
+def generate_unique_email(first_name, last_name, name):
     base_name = f"{first_name}.{last_name}".replace(" ", ".").lower()
-    gr = str(gr_number).strip().lower().replace(" ", "")
+    gr = str(name).strip().lower().replace(" ", "")
     base = re.sub(r'\.+', '.', f"{base_name}.{gr}").strip('.')
 
     while True:
@@ -1054,7 +1129,7 @@ def bulk_enroll_students(className, divisionName, generateQRCode, students):
             enroll_student(student, className, divisionName, year, term, generateQRCode)
 
             # Get enrolled student ID
-            student_id = frappe.db.get_value("Student", {"gr_number": student.get("GR Number")}, "name")
+            student_id = frappe.db.get_value("Student", {"name": student.get("GR Number")}, "name")
 
             # Add to Student Group if not already there
             if student_id and student_id not in existing_student_ids:
@@ -1142,7 +1217,7 @@ def enroll_student(student, className, divisionName, year, term, generateQRCode)
     student_doc.student_email_id = email
     student_doc.user = email
     student_doc.student_mobile_number = phone
-    student_doc.gr_number = student["GR Number"]
+    student_doc.name = student["GR Number"]
     student_doc.aadhar_number = student["Aadhar Number"]
     student_doc.save(ignore_permissions=True)
     # ✅ Generate QR Code if enabled
@@ -1223,7 +1298,7 @@ def enroll_single_student(student_data, className, divisionName, generateQRCode)
 
         # --- Get the Student doc name after enrollment ---
         student_id = frappe.db.get_value(
-            "Student", {"gr_number": student_data.get("GR Number")}, "name"
+            "Student", {"name": student_data.get("GR Number")}, "name"
         )
         if not student_id:
             frappe.throw(f"Could not find enrolled Student with GR Number {student_data.get('GR Number')}")

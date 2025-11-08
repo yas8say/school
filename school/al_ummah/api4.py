@@ -61,9 +61,9 @@ def safe_int(val):
         return float('inf')
 
 
-def generate_unique_email(first_name, last_name, gr_number):
+def generate_unique_email(first_name, last_name, name):
     base_name = f"{first_name}.{last_name}".replace(" ", ".").lower()
-    gr = str(gr_number).strip().lower().replace(" ", "")
+    gr = str(name).strip().lower().replace(" ", "")
     base = re.sub(r'\.+', '.', f"{base_name}.{gr}").strip('.')
 
     while True:
@@ -204,7 +204,7 @@ def enroll_single_student(student_data, className, divisionName, generate_qr_cod
 
         # --- Get the Student doc name after enrollment ---
         student_id = frappe.db.get_value(
-            "Student", {"gr_number": student_data.get("GR Number")}, "name"
+            "Student", {"name": student_data.get("GR Number")}, "name"
         )
         if not student_id:
             frappe.throw(f"Could not find enrolled Student with GR Number {student_data.get('GR Number')}")
@@ -267,7 +267,7 @@ def enroll_student(student, className, divisionName, year, term, generate_qr_cod
     if email and frappe.db.exists("Student", {"student_email_id": email}):
         frappe.throw(_("Duplicate email for: {0}, {1}").format(full_name, email))
 
-    if frappe.db.exists("Student", {"gr_number": student.get("GR Number")}):
+    if frappe.db.exists("Student", {"name": student.get("GR Number")}):
         frappe.throw(_("Duplicate GR Number for: {0}, {1}").format(full_name, student.get("GR Number")))
 
     # --- Generate fallback email ---
@@ -309,7 +309,7 @@ def enroll_student(student, className, divisionName, year, term, generate_qr_cod
         student_doc.user = email
         student_doc.date_of_birth = dob
         student_doc.student_mobile_number = phone
-        student_doc.gr_number = student["GR Number"]
+        # student_doc.name = student["GR Number"]
         student_doc.save(ignore_permissions=True)
         # ✅ Generate QR Code if enabled
         if generate_qr_code:
@@ -317,7 +317,7 @@ def enroll_student(student, className, divisionName, year, term, generate_qr_cod
             import base64
             from io import BytesIO
 
-            qr_data = f"{student_doc.name} / {student_doc.gr_number} - {student_doc.student_name}"
+            qr_data = f"{student_doc.name} / {student_doc.name} - {student_doc.student_name}"
 
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
             qr.add_data(qr_data)
@@ -341,7 +341,24 @@ def enroll_student(student, className, divisionName, year, term, generate_qr_cod
 
             # ✅ Do NOT use save() again — use db_set()
             student_doc.db_set("qr_code", file_doc.file_url)
+        
+        # ✅ Rename Student document to "GR-{GR Number}" format
+        name = student["GR Number"]
+        new_doc_name = f"GR-{name}"
+        auto_name = student_doc.name
 
+        if auto_name != new_doc_name:
+            try:
+                print(f"📝 Renaming {auto_name} to {new_doc_name}")
+                frappe.rename_doc("Student", auto_name, new_doc_name, force=True)
+                # Update the student_doc reference after successful rename
+                student_doc = frappe.get_doc("Student", new_doc_name)
+                print(f"✅ Student renamed successfully to: {student_doc.name}")
+            except Exception as rename_error:
+                print(f"⚠️ Rename failed: {str(rename_error)}")
+                # Continue with the auto-generated name - student is still created
+        else:
+            print(f"✅ Student already has correct name: {student_doc.name}")
 
         
         # Check if Student creation was successful
@@ -484,9 +501,9 @@ def bulk_enroll_students(className, divisionName, generate_qr_code, students):
             try:
                 # Enroll student
                 enroll_student(student, className, divisionName, year, term, generate_qr_code)
-
+                gr_num = f"GR-{student.get("GR Number")}"
                 # Get enrolled student ID
-                student_id = frappe.db.get_value("Student", {"gr_number": student.get("GR Number")}, "name")
+                student_id = frappe.db.get_value("Student", {"name": gr_num}, "name")
 
                 # Add to Student Group if not already there
                 if student_id and student_id not in existing_student_ids:
@@ -896,7 +913,7 @@ def process_student_payment(student_id, invoice_names, mode_of_payment, paid_to_
     Process student payment for selected invoices using unified payment entry method
     Accepts either:
     - Student.name (primary key) 
-    - GR Number (gr_number field)
+    - GR Number (name field)
     """
     try:
         # Validate input parameters
@@ -925,7 +942,7 @@ def process_student_payment(student_id, invoice_names, mode_of_payment, paid_to_
         else:
             resolved_student_id = frappe.db.get_value(
                 "Student",
-                {"gr_number": student_id},
+                {"name": student_id},
                 "name"
             )
 
@@ -1215,7 +1232,7 @@ def get_sales_invoices_by_student(student_id):
     Get all unpaid sales invoices for a student.
     Accepts either:
     - Student.name  (primary key)
-    - GR Number (gr_number field)
+    - GR Number (name field)
     """
 
     try:
@@ -1237,9 +1254,10 @@ def get_sales_invoices_by_student(student_id):
 
         # Case 2 → Maybe 'student_id' is actually a GR Number
         else:
+            gr_num = f"GR-{student_id}"
             resolved_student = frappe.db.get_value(
                 "Student",
-                {"gr_number": student_id},
+                {"name": gr_num},
                 "name"
             )
 
@@ -1350,7 +1368,7 @@ def verify_razorpay_payment(razorpay_payment_id, razorpay_order_id, razorpay_sig
         else:
             resolved_student_id = frappe.db.get_value(
                 "Student",
-                {"gr_number": student_id},
+                {"name": student_id},
                 "name"
             )
 

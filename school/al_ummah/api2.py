@@ -351,7 +351,7 @@ def get_student_details(student):
         "middle_name": getattr(student_doc, "middle_name", None),
         "last_name": student_doc.last_name,
         "student_date_of_birth": getattr(student_doc, "date_of_birth", getattr(student_doc, "student_date_of_birth", None)),
-        "gr_number": getattr(student_doc, "gr_number", None),
+        "name": getattr(student_doc, "name", None),
         "email_address": getattr(student_doc, "student_email_id", None),
         "phone_number": getattr(student_doc, "student_mobile_number", None),
         "roll_number": getattr(student_doc, "roll_number", None)
@@ -396,7 +396,7 @@ def update_student_details(
     middle_name=None,
     last_name=None,
     student_date_of_birth=None,
-    gr_number=None,
+    name=None,
     email_address=None,
     phone_number=None,
     roll_number=None,
@@ -462,8 +462,8 @@ def update_student_details(
             else:
                 student_doc.student_date_of_birth = student_date_of_birth
             updated = True
-        if gr_number:
-            student_doc.gr_number = gr_number
+        if name:
+            student_doc.name = name
             updated = True
         if email_address:
             student_doc.student_email_id = email_address

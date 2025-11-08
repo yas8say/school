@@ -129,12 +129,12 @@ def safe_delete_user(user_id):
 def delete_students_completely():
     print("\n🔹 Deleting Students and linked Users...")
 
-    students = frappe.get_all("Student", fields=["name", "student_email_id", "gr_number"])
+    students = frappe.get_all("Student", fields=["name", "student_email_id", "name"])
 
     for s in students:
         sid = s.name
         email = s.student_email_id
-        gr = s.gr_number
+        gr = s.name
 
         try:
             # ✅ Delete all Student child tables

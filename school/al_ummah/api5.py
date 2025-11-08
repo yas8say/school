@@ -4,16 +4,37 @@ from education.education.doctype.fee_structure.fee_structure import make_fee_sch
 from frappe.utils import nowdate
 
 @frappe.whitelist()
-def create_and_submit_fee_schedules_with_invoices(fee_structure_name, student_group_name, fee_plan):
+def create_and_submit_fee_schedules_with_invoices(fee_structure_name, student_groups, fee_plan, due_dates=None):
     """
     Create and submit fee schedules, then create and submit sales invoices/orders for all students
+    Accepts lists of student groups and optional due dates
     """
     try:
         # Validate input parameters
-        if not all([fee_structure_name, student_group_name, fee_plan]):
+        if not all([fee_structure_name, student_groups, fee_plan]):
             return {
                 "success": False,
-                "message": "Fee Structure Name, Student Group Name, and Fee Plan are required"
+                "message": "Fee Structure Name, Student Groups, and Fee Plan are required"
+            }
+
+        # Validate student_groups is a list
+        if isinstance(student_groups, str):
+            student_groups = json.loads(student_groups)
+        
+        if not isinstance(student_groups, list):
+            return {
+                "success": False,
+                "message": "Student Groups must be a list"
+            }
+
+        # Validate due_dates if provided
+        if due_dates and isinstance(due_dates, str):
+            due_dates = json.loads(due_dates)
+        
+        if due_dates and not isinstance(due_dates, list):
+            return {
+                "success": False,
+                "message": "Due Dates must be a list"
             }
 
         # Validate fee plan
@@ -31,15 +52,16 @@ def create_and_submit_fee_schedules_with_invoices(fee_structure_name, student_gr
                 "message": f"Fee Structure {fee_structure_name} not found"
             }
 
-        # Validate student group exists
-        if not frappe.db.exists("Student Group", student_group_name):
-            return {
-                "success": False,
-                "message": f"Student Group {student_group_name} not found"
-            }
+        # Validate all student groups exist
+        for student_group in student_groups:
+            if not frappe.db.exists("Student Group", student_group):
+                return {
+                    "success": False,
+                    "message": f"Student Group {student_group} not found"
+                }
 
         # Step 1: Create and submit fee schedules
-        created_schedules = create_and_submit_fee_schedules(fee_structure_name, student_group_name, fee_plan)
+        created_schedules = create_and_submit_fee_schedules(fee_structure_name, student_groups, fee_plan, due_dates)
         
         if not created_schedules:
             return {
@@ -72,7 +94,7 @@ def create_and_submit_fee_schedules_with_invoices(fee_structure_name, student_gr
         }
 
 
-def create_and_submit_fee_schedules(fee_structure_name, student_group_name, fee_plan):
+def create_and_submit_fee_schedules(fee_structure_name, student_groups, fee_plan, due_dates=None):
     """Create fee schedules and return list of created schedule names"""
     try:
         fs = frappe.get_doc("Fee Structure", fee_structure_name)
@@ -94,12 +116,26 @@ def create_and_submit_fee_schedules(fee_structure_name, student_group_name, fee_
             academic_year=fs.academic_year
         )
 
+        # Prepare student groups in required format
+        student_groups_formatted = [{"student_group": sg} for sg in student_groups]
+        
+        # If custom due dates are provided, use them instead of the distribution data
+        if due_dates:
+            # Validate due dates match distribution count
+            if len(due_dates) != len(distribution_data["distribution"]):
+                frappe.throw(f"Number of due dates ({len(due_dates)}) must match number of distributions ({len(distribution_data['distribution'])})")
+            
+            # Replace due dates in distribution
+            for i, distribution in enumerate(distribution_data["distribution"]):
+                if i < len(due_dates):
+                    distribution["due_date"] = due_dates[i]
+
         result = make_fee_schedule(
             source_name=fee_structure_name,
             dialog_values=json.dumps({
                 "fee_plan": fee_plan,
                 "distribution": distribution_data["distribution"],
-                "student_groups": [{"student_group": student_group_name}]
+                "student_groups": student_groups_formatted
             }),
             per_component_amount=json.dumps(distribution_data["per_component_amount"]),
             total_amount=fs.total_amount
@@ -296,15 +332,32 @@ def get_students_from_group(student_group, academic_year, academic_term=None, st
 #____________________________________________
 
 @frappe.whitelist()
-def get_fee_structures_for_selection():
-    """Get list of fee structures for frontend selection"""
+def get_fee_structures_for_selection(program=None):
+    """Get list of fee structures for frontend selection, optionally filtered by program"""
     try:
+        # Build filters
+        filters = {"docstatus": 1}
+        
+        # Add program filter if provided
+        if program:
+            filters["program"] = program
+        
         fee_structures = frappe.get_all(
             "Fee Structure",
-            filters={"docstatus": 1},
+            filters=filters,
             fields=["name", "academic_year", "academic_term", "program", "total_amount"],
             order_by="academic_year desc, creation desc"
         )
+        
+        # Get components for each fee structure
+        for structure in fee_structures:
+            components = frappe.get_all(
+                "Fee Component",
+                filters={"parent": structure.name},
+                fields=["fees_category", "amount", "discount", "total"],
+                order_by="idx"
+            )
+            structure["components"] = components
         
         return {
             "success": True,

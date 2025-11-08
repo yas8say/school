@@ -465,7 +465,7 @@ const editStudent = (student) => {
     'Middle Name': student.middle_name || student.student_name?.split(' ')[1] || '',
     'Last Name': student.last_name || student.student_name?.split(' ')[2] || '',
     'Student Date of Birth': student.date_of_birth || student.student_date_of_birth || '',
-    'GR Number': student.gr_number || student.group_roll_number || '',
+    'GR Number': student.name || student.group_roll_number || '',
     
     // Contact Information
     'Email Address': student.email || student.email_address || '',

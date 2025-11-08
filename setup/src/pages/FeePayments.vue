@@ -66,7 +66,7 @@
           <h2 class="student-name">{{ studentInfo.student_name || scannedStudentId }}</h2>
           <div class="student-meta">
             <span class="student-id">ID: {{ scannedStudentId }}</span>
-            <span v-if="studentInfo.gr_number" class="gr-number">GR: {{ studentInfo.gr_number }}</span>
+            <span v-if="studentInfo.name" class="gr-number">GR: {{ studentInfo.name }}</span>
           </div>
         </div>
         <button @click="resetScanner" class="icon-button">
