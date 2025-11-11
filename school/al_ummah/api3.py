@@ -705,6 +705,7 @@ def create_program_and_groups_with_courses(values):
             class_name = class_info.get("className")
             class_subjects = class_info.get("subjects", [])
             divisions = class_info.get("divisions", [])
+            is_single_group = class_info.get("isSingleGroup", False)  # Check if single group is enabled
 
             program_exists = frappe.db.exists("Program", {"program_name": class_name})
 
@@ -735,11 +736,11 @@ def create_program_and_groups_with_courses(values):
                 except Exception:
                     continue
 
-            # Create student groups
-            for division_info in divisions:
-                division_name = division_info.get("divisionName")
-                student_group_name = f"{division_name} ({academic_year_name})"
-
+            # Create student groups - HANDLE SINGLE GROUP CASE
+            if is_single_group:
+                # For single group programs, create ONE group with format: "ProgramName AcademicYear"
+                student_group_name = f"{class_name} {academic_year_name}"
+                
                 if not frappe.db.exists("Student Batch Name", {"batch_name": student_group_name}):
                     batch_doc = frappe.new_doc("Student Batch Name")
                     batch_doc.batch_name = student_group_name
@@ -756,6 +757,31 @@ def create_program_and_groups_with_courses(values):
                         student_group_doc.academic_term = first_term
                     student_group_doc.batch = student_group_name
                     student_group_doc.save(ignore_permissions=True)
+                    
+                print(f"✅ Created SINGLE student group: {student_group_name} for program: {class_name}")
+                
+            else:
+                # For multi-group programs, create groups for each division (original logic)
+                for division_info in divisions:
+                    division_name = division_info.get("divisionName")
+                    student_group_name = f"{division_name} {academic_year_name}"
+
+                    if not frappe.db.exists("Student Batch Name", {"batch_name": student_group_name}):
+                        batch_doc = frappe.new_doc("Student Batch Name")
+                        batch_doc.batch_name = student_group_name
+                        batch_doc.save(ignore_permissions=True)
+
+                    if not frappe.db.exists("Student Group", {"student_group_name": student_group_name}):
+                        student_group_doc = frappe.new_doc("Student Group")
+                        student_group_doc.student_group_name = student_group_name
+                        student_group_doc.program = class_name
+                        student_group_doc.group_based_on = "Batch"
+                        student_group_doc.academic_year = academic_year_name
+                        if not set_as_current:
+                            first_term = get_first_academic_term(academic_year_name)
+                            student_group_doc.academic_term = first_term
+                        student_group_doc.batch = student_group_name
+                        student_group_doc.save(ignore_permissions=True)
 
         frappe.db.commit()
         return {"status": "success", "message": "Programs and Student Groups created successfully."}
@@ -763,7 +789,6 @@ def create_program_and_groups_with_courses(values):
     except Exception as e:
         frappe.log_error(f"Error in create_program_and_groups_with_courses: {str(e)}", "Setup Error")
         return {"status": "failed", "message": f"An error occurred: {str(e)}"}
-
 
 def get_first_academic_term(academic_year):
     """

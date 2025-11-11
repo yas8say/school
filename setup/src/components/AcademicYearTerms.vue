@@ -1,7 +1,7 @@
 <template>
   <div class="academic-year-form">
     <div class="form-header">
-      <h3 class="form-title">Academic Year Setup</h3>
+      <!-- <h3 class="form-title">Academic Year Setup</h3> -->
       <p class="form-subtitle">
         Provide details about the academic year, its duration, and terms.
       </p>

@@ -202,12 +202,13 @@ def enroll_single_student(student_data, className, divisionName, generate_qr_cod
         # --- Enroll the student ---
         enroll_student(student_data, className, divisionName, year, term, generate_qr_code)
 
+        gr_num = f"GR-{student.get("GR Number")}"
         # --- Get the Student doc name after enrollment ---
         student_id = frappe.db.get_value(
-            "Student", {"name": student_data.get("GR Number")}, "name"
+            "Student", {"name": gr_num}, "name"
         )
         if not student_id:
-            frappe.throw(f"Could not find enrolled Student with GR Number {student_data.get('GR Number')}")
+            frappe.throw(f"Could not find enrolled Student with GR Number {gr_num}")
 
         full_name = " ".join(
             part for part in [
@@ -267,8 +268,9 @@ def enroll_student(student, className, divisionName, year, term, generate_qr_cod
     if email and frappe.db.exists("Student", {"student_email_id": email}):
         frappe.throw(_("Duplicate email for: {0}, {1}").format(full_name, email))
 
-    if frappe.db.exists("Student", {"name": student.get("GR Number")}):
-        frappe.throw(_("Duplicate GR Number for: {0}, {1}").format(full_name, student.get("GR Number")))
+    gr_num = f"GR-{student.get("GR Number")}"
+    if frappe.db.exists("Student", {"name": gr_num}):
+        frappe.throw(_("Duplicate GR Number for: {0}, {1}").format(full_name, gr_num))
 
     # --- Generate fallback email ---
     if not email or "@" not in email:
@@ -473,7 +475,8 @@ def bulk_enroll_students(className, divisionName, generate_qr_code, students):
 
     try:
         # --- Get existing Student Group ---
-        student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
+        student_group = frappe.get_doc("Student Group", divisionName)
+        # student_group = frappe.get_doc("Student Group", {"program": className, "batch": divisionName})
         if not student_group:
             frappe.throw(f"No Student Group found for Program '{className}' and Division '{divisionName}'")
 

@@ -17,19 +17,19 @@
       <h3 class="section-title">Classes List</h3>
       
       <div 
-        v-for="program in editablePrograms" 
-        :key="program.id"
+        v-for="(program, index) in editablePrograms" 
+        :key="program.uniqueId || program.id"
         class="program-item"
       >
         <input
           type="text"
           v-model="program.className"
           class="program-input"
-          @input="handleEditProgram(program.id, $event.target.value)"
+          @input="handleEditProgram(index, $event.target.value)"
         />
         <button 
           class="delete-btn"
-          @click="handleDeleteProgram(program.id)"
+          @click="handleDeleteProgram(index)"
           title="Remove class"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -37,21 +37,6 @@
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-      </div>
-    </div>
-
-    <div class="quick-select" v-if="selectedInstitution === ''">
-      <h3 class="section-title">Quick Select Programs</h3>
-      <div class="program-grid">
-        <div 
-          v-for="program in availablePrograms" 
-          :key="program.id"
-          class="program-card"
-          :class="{ 'selected': isSelected(program) }"
-          @click="toggleProgram(program)"
-        >
-          {{ program.name }}
-        </div>
       </div>
     </div>
 
@@ -66,68 +51,36 @@
 </template>
 
 <script>
-const ALL_PROGRAMS = [
-  { id: 1, name: 'Pre-K' },
-  { id: 2, name: 'Kindergarten' },
-  { id: 3, name: '1st Grade' },
-  { id: 4, name: '2nd Grade' },
-  { id: 5, name: '3rd Grade' },
-  { id: 6, name: '4th Grade' },
-  { id: 7, name: '5th Grade' },
-  { id: 8, name: '6th Grade' },
-  { id: 9, name: '7th Grade' },
-  { id: 10, name: '8th Grade' },
-  { id: 11, name: '9th Grade' },
-  { id: 12, name: '10th Grade' },
-  { id: 13, name: '11th Grade' },
-  { id: 14, name: '12th Grade' },
-  { id: 15, name: 'Other' }
-];
-
 const PROGRAM_OPTIONS = {
   school: [
-    "Nursery", "Jr KG", "Sr KG", "1st", "2nd", "3rd", "4th", "5th",
-    "6th", "7th", "8th", "9th", "10th", "11th", "12th"
+    "Nursery", "Jr KG", "Sr KG", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"
   ],
   college: [
-    // Bachelors (3)
-    "FY Bachelors",
-    "SY Bachelors",
-    "TY Bachelors",
-
-    //Diploma
-    "FY Diploma",
-    "SY Diploma",
-
-    // BTech (Engineering – 4 years)
-    "FY BTech",
-    "SY BTech",
-    "TY BTech",
-    "Final Year BTech",
-
-    // Masters (2 years)
-    "FY Masters",
-    "SY Masters",
-
-    // PhD (variable duration)
-    "PhD Year 1",
-    "PhD Year 2",
-    "PhD Year 3",
-    "PhD Year 4",
-    "PhD Year 5"
+    "FY Bachelors", "SY Bachelors", "TY Bachelors",
+    "FY Diploma", "SY Diploma",
+    "FY BTech", "SY BTech", "TY BTech", "Final Year BTech",
+    "FY Masters", "SY Masters",
+    "PhD Year 1", "PhD Year 2", "PhD Year 3", "PhD Year 4", "PhD Year 5"
   ]
-
 };
 
 export default {
   props: {
     values: Object
   },
+  computed: {
+    selectedInstitution: {
+      get() {
+        return this.values.selectedInstitution || '';
+      },
+      set(value) {
+        this.updateField('selectedInstitution', value);
+      }
+    }
+  },
   data() {
     return {
-      selectedInstitution: '',
-      editablePrograms: [],
-      availablePrograms: ALL_PROGRAMS
+      editablePrograms: []
     };
   },
   watch: {
@@ -135,49 +88,35 @@ export default {
       immediate: true,
       handler(newClasses) {
         if (newClasses && newClasses.length > 0) {
-          this.editablePrograms = [...newClasses];
+          this.editablePrograms = newClasses.map(program => ({
+            ...program,
+            uniqueId: program.uniqueId || program.id || this.generateUniqueId()
+          }));
+        } else {
+          this.editablePrograms = [];
         }
       }
     }
   },
-  computed: {
-    selectedPrograms() {
-      return this.values.classes || [];
-    }
-  },
   methods: {
-    isSelected(program) {
-      return this.selectedPrograms.some(p => p.id === program.id);
+    generateUniqueId() {
+      return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     },
-    toggleProgram(program) {
-      let updatedPrograms;
-      
-      if (this.isSelected(program)) {
-        updatedPrograms = this.selectedPrograms.filter(p => p.id !== program.id);
-      } else {
-        updatedPrograms = [...this.selectedPrograms, { 
-          id: program.id, 
-          className: program.name,
-          subjects: [],
-          divisions: []
-        }];
-      }
-      
+    updateField(field, value) {
+      this.$emit('update-field', { field, value });
+    },
+    handleEditProgram(index, newName) {
+      const updatedPrograms = [...this.editablePrograms];
+      updatedPrograms[index].className = newName;
       this.updatePrograms(updatedPrograms);
     },
-    handleEditProgram(id, newName) {
-      const updatedPrograms = this.editablePrograms.map(program =>
-        program.id === id ? { ...program, className: newName } : program
-      );
-      this.updatePrograms(updatedPrograms);
-    },
-    handleDeleteProgram(id) {
-      const updatedPrograms = this.editablePrograms.filter(program => program.id !== id);
+    handleDeleteProgram(index) {
+      const updatedPrograms = this.editablePrograms.filter((_, i) => i !== index);
       this.updatePrograms(updatedPrograms);
     },
     handleAddProgram() {
       const newProgram = {
-        id: Math.random().toString(),
+        uniqueId: this.generateUniqueId(),
         className: "",
         subjects: [],
         divisions: []
@@ -187,7 +126,7 @@ export default {
     },
     handleInstitutionChange() {
       const formattedPrograms = (PROGRAM_OPTIONS[this.selectedInstitution] || []).map(name => ({
-        id: Math.random().toString(),
+        uniqueId: this.generateUniqueId(),
         className: name,
         subjects: [],
         divisions: []
@@ -206,6 +145,7 @@ export default {
 </script>
 
 <style scoped>
+/* Your existing styles remain the same */
 .program-selector-container {
   background-color: #fff;
   border-radius: 8px;
@@ -279,37 +219,6 @@ export default {
 
 .delete-btn:hover {
   background-color: rgba(231, 76, 60, 0.1);
-}
-
-.quick-select {
-  margin-bottom: 20px;
-}
-
-.program-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.program-card {
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  background-color: #f9f9f9;
-}
-
-.program-card:hover {
-  background-color: #f0f0f0;
-}
-
-.program-card.selected {
-  background-color: #3498db;
-  color: white;
-  border-color: #2980b9;
 }
 
 .add-btn {

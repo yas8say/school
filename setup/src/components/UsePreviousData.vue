@@ -1,6 +1,6 @@
 <template>
   <div class="card">
-    <h3 class="section-title">Use Previous Data</h3>
+    <!-- <h3 class="section-title">Use Previous Data</h3> -->
     
     <div v-if="previousDataResource.loading" class="loading">Loading previous data...</div>
     <div v-else>

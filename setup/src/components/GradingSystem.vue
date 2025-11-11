@@ -1,7 +1,7 @@
 <template>
   <div class="grading-system-container">
     <div class="mb-8">
-      <h3 class="text-lg font-semibold text-gray-800 mb-2">Grading System Setup</h3>
+      <!-- <h3 class="text-lg font-semibold text-gray-800 mb-2">Grading System Setup</h3> -->
       <p class="text-gray-600">Configure your institution's grading system. This step is optional.</p>
     </div>
 
@@ -95,17 +95,18 @@
         />
       </div>
 
-      <!-- Quick Templates -->
+      <!-- Quick Templates - Auto-selected based on institution type -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-3">
           Quick Templates (Optional)
         </label>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <button
-            v-for="institute in instituteTypes"
+            v-for="institute in filteredInstituteTypes"
             :key="institute.value"
             @click="applyTemplate(institute)"
             class="p-4 border border-gray-300 rounded-lg text-left bg-white hover:border-gray-400 transition-colors"
+            :class="{ 'border-blue-500 bg-blue-50': isRecommendedTemplate(institute) }"
           >
             <div class="flex items-center space-x-3">
               <div class="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -116,6 +117,14 @@
               <div>
                 <h4 class="font-medium text-gray-900">{{ institute.label }}</h4>
                 <p class="text-xs text-gray-500 mt-1">{{ institute.grades.length }} pre-defined grades</p>
+                <div v-if="isRecommendedTemplate(institute)" class="mt-1">
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Recommended for your institution
+                  </span>
+                </div>
               </div>
             </div>
           </button>
@@ -225,33 +234,11 @@
         </ul>
       </div>
     </div>
-
-    <!-- Action Buttons -->
-    <div class="mt-8 flex justify-between items-center pt-6 border-t border-gray-200">
-      <div class="text-sm text-gray-500">
-        This step is optional.
-      </div>
-      <div class="flex space-x-3">
-        <button
-          @click="skipGrading"
-          class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Skip Grading
-        </button>
-        <button
-          @click="submitGrading"
-          :disabled="!isFormValid && selectedOption !== ''"
-          class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
-        >
-          Continue
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { createResource } from 'frappe-ui';
 
 export default {
@@ -264,7 +251,7 @@ export default {
     }
   },
   setup(props, { emit }) {
-    // Local state - don't use reactive() for frequently updated data
+    // Local state
     const selectedOption = ref(props.values.gradingSystem?.selectedOption || '');
     const scaleName = ref(props.values.gradingSystem?.scaleName || '');
     const previousScaleName = ref(props.values.gradingSystem?.previousScaleName || '');
@@ -274,6 +261,11 @@ export default {
     const showValidation = ref(false);
 
     let updateTimeout = null;
+
+    // Get institution type from parent component
+    const institutionType = computed(() => {
+      return props.values.selectedInstitution || 'school';
+    });
 
     // API Resource for fetching grading scales
     const gradingScalesResource = createResource({
@@ -294,7 +286,8 @@ export default {
     const instituteTypes = ref([
       {
         value: 'school',
-        label: 'School (K-12)',
+        label: 'School',
+        description: 'Comprehensive grading system suitable for K-12 schools',
         grades: [
           { grade_code: 'A+', threshold: 95, description: 'Outstanding' },
           { grade_code: 'A', threshold: 90, description: 'Excellent' },
@@ -309,6 +302,7 @@ export default {
       {
         value: 'college',
         label: 'College/University',
+        description: 'Standard grading system for higher education',
         grades: [
           { grade_code: 'A', threshold: 90, description: 'Excellent' },
           { grade_code: 'B', threshold: 80, description: 'Good' },
@@ -320,6 +314,15 @@ export default {
     ]);
 
     // Computed properties
+    const filteredInstituteTypes = computed(() => {
+      // Show both templates but highlight the one matching the institution type
+      return instituteTypes.value;
+    });
+
+    const isRecommendedTemplate = (institute) => {
+      return institute.value === institutionType.value;
+    };
+
     const hasValidManualGrades = computed(() => {
       return manualGrades.value.length > 0 && 
              manualGrades.value.every(grade => 
@@ -349,6 +352,15 @@ export default {
 
     function selectOption(option) {
       selectedOption.value = option;
+      
+      // Auto-apply template when selecting manual and no grades exist
+      if (option === 'manual' && manualGrades.value.length === 1 && !manualGrades.value[0].grade_code) {
+        const recommendedTemplate = instituteTypes.value.find(t => t.value === institutionType.value);
+        if (recommendedTemplate) {
+          applyTemplate(recommendedTemplate);
+        }
+      }
+      
       updateFormData();
     }
 
@@ -406,38 +418,40 @@ export default {
       });
     }
 
-    function submitGrading() {
-      showValidation.value = true;
-      
-      if (!isFormValid.value && selectedOption.value !== '') {
-        return;
+    function handleSubmit() {
+      if (selectedOption.value !== '') {
+        showValidation.value = true;
+        
+        if (!isFormValid.value) {
+          return;
+        }
       }
 
       updateFormData();
       emit('grading-completed');
     }
 
-    function skipGrading() {
-      selectedOption.value = '';
-      scaleName.value = '';
-      previousScaleName.value = '';
-      manualGrades.value = [{ grade_code: '', threshold: '', description: '' }];
-      showValidation.value = false;
-      
-      emit('update-field', {
-        field: 'gradingSystem',
-        value: {
-          selectedOption: '',
-          scaleName: '',
-          previousScaleName: '',
-          gradeData: null
+    // Watch for institution type changes and auto-apply template if manual mode is selected
+    watch(institutionType, (newType) => {
+      if (selectedOption.value === 'manual' && manualGrades.value.length === 1 && !manualGrades.value[0].grade_code) {
+        const recommendedTemplate = instituteTypes.value.find(t => t.value === newType);
+        if (recommendedTemplate) {
+          applyTemplate(recommendedTemplate);
         }
-      });
-      emit('grading-completed');
-    }
+      }
+    });
 
     onMounted(() => {
       fetchGradingScales();
+      
+      // Auto-apply template based on institution type if no grades are set
+      if (selectedOption.value === 'manual' && manualGrades.value.length === 1 && !manualGrades.value[0].grade_code) {
+        const recommendedTemplate = instituteTypes.value.find(t => t.value === institutionType.value);
+        if (recommendedTemplate) {
+          applyTemplate(recommendedTemplate);
+        }
+      }
+      
       // Initial update
       updateFormData();
     });
@@ -450,16 +464,17 @@ export default {
       gradingScales,
       loadingScales,
       instituteTypes,
+      filteredInstituteTypes,
       showValidation,
       hasValidManualGrades,
       hasManualValidationErrors,
       isFormValid,
+      isRecommendedTemplate,
       selectOption,
       applyTemplate,
       addGrade,
       removeGrade,
-      submitGrading,
-      skipGrading,
+      handleSubmit,
       debouncedUpdate
     };
   }

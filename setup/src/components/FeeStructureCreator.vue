@@ -1,52 +1,9 @@
 <template>
   <div class="bg-white shadow rounded-lg p-6 space-y-6">
-    <h3 class="text-lg font-semibold text-gray-800 border-b pb-3">Create Fee Structures</h3>
+    <!-- <h3 class="text-lg font-semibold text-gray-800 border-b pb-3">Create Fee Structures</h3> -->
     
-    <!-- Institution Type Selection -->
-    <div class="institution-type-section">
-      <label class="block text-sm font-medium text-gray-700 mb-3">Select Institution Type</label>
-      <div class="grid grid-cols-2 gap-4">
-        <div 
-          class="institution-card p-4 border-2 rounded-lg cursor-pointer transition-all duration-200"
-          :class="selectedInstitutionType === 'school' 
-            ? 'border-blue-500 bg-blue-50 shadow-sm' 
-            : 'border-gray-200 hover:border-blue-300 bg-white'"
-          @click="selectInstitutionType('school')"
-        >
-          <div class="text-center">
-            <div class="w-10 h-10 mx-auto mb-2 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l9 5m-9-5v8" />
-              </svg>
-            </div>
-            <h4 class="font-medium text-gray-900 text-sm">School</h4>
-            <p class="text-xs text-gray-500 mt-1">Primary & Secondary</p>
-          </div>
-        </div>
-        
-        <div 
-          class="institution-card p-4 border-2 rounded-lg cursor-pointer transition-all duration-200"
-          :class="selectedInstitutionType === 'college' 
-            ? 'border-green-500 bg-green-50 shadow-sm' 
-            : 'border-gray-200 hover:border-green-300 bg-white'"
-          @click="selectInstitutionType('college')"
-        >
-          <div class="text-center">
-            <div class="w-10 h-10 mx-auto mb-2 bg-green-100 rounded-full flex items-center justify-center">
-              <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <h4 class="font-medium text-gray-900 text-sm">College</h4>
-            <p class="text-xs text-gray-500 mt-1">Higher Education</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Fee Structure Templates -->
-    <div v-if="selectedInstitutionType" class="structure-templates-section">
+    <div class="structure-templates-section">
       <div class="flex items-center justify-between mb-3">
         <label class="block text-sm font-medium text-gray-700">Fee Structure Templates</label>
         <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
@@ -56,7 +13,7 @@
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div 
-          v-for="template in feeStructureTemplates[selectedInstitutionType]" 
+          v-for="template in feeStructureTemplates[institutionType]" 
           :key="template.name"
           class="template-card p-3 border rounded-lg transition-all duration-200 cursor-pointer"
           :class="selectedTemplates[template.name] 
@@ -93,7 +50,7 @@
     </div>
 
     <!-- Class-wise Fee Structures -->
-    <div v-if="selectedInstitutionType && classes.length > 0" class="class-structures-section">
+    <div v-if="classes.length > 0" class="class-structures-section">
       <h4 class="text-md font-semibold text-gray-800 mb-4">Class-wise Fee Structures</h4>
       
       <div class="space-y-6">
@@ -123,57 +80,57 @@
             </button>
           </div>
           
-<!-- Fee Structures for this Class -->
-<div v-if="feeStructures[classIndex] && feeStructures[classIndex].length > 0" class="space-y-3">
-  <div 
-    v-for="(structure, structureIndex) in feeStructures[classIndex]" 
-    :key="structureIndex"
-    class="structure-card p-3 border border-gray-100 rounded-lg bg-gray-50"
-  >
-    <div class="flex items-center justify-between mb-2">
-      <div class="flex items-center space-x-2">
-        <input
-          :value="structure.name"
-          @input="updateStructureName(classIndex, structureIndex, $event.target.value)"
-          class="font-medium text-gray-800 text-sm bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5"
-        />
-    <div class="relative">
-      <select
-        :value="structure.frequency"
-        @change="updateStructureFrequency(classIndex, structureIndex, $event.target.value)"
-        class="text-xs font-medium pr-8 pl-3 py-1 rounded-full border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-        :class="getFrequencySelectClass(structure.frequency)"
-      >
-        <option 
-          v-for="freq in feeFrequencies" 
-          :key="freq.value"
-          :value="freq.value"
-          class="text-gray-800"
-        >
-          {{ freq.label }}
-        </option>
-      </select>
-      <div class="custom-select-arrow">
-        <svg class="w-3 h-3 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
-      </div>
-    </div>
-      </div>
-      <div class="flex items-center space-x-1">
-        <span class="text-xs text-gray-500">Total: ₹{{ calculateStructureTotal(classIndex, structureIndex).toLocaleString() }}</span>
-        <button 
-          v-if="feeStructures[classIndex].length > 1"
-          @click="removeStructure(classIndex, structureIndex)"
-          class="text-red-400 hover:text-red-600 transition-colors p-1"
-          title="Remove structure"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
-    </div>
+          <!-- Fee Structures for this Class -->
+          <div v-if="feeStructures[classIndex] && feeStructures[classIndex].length > 0" class="space-y-3">
+            <div 
+              v-for="(structure, structureIndex) in feeStructures[classIndex]" 
+              :key="structureIndex"
+              class="structure-card p-3 border border-gray-100 rounded-lg bg-gray-50"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2">
+                  <input
+                    :value="structure.name"
+                    @input="updateStructureName(classIndex, structureIndex, $event.target.value)"
+                    class="font-medium text-gray-800 text-sm bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5"
+                  />
+                  <div class="relative">
+                    <select
+                      :value="structure.frequency"
+                      @change="updateStructureFrequency(classIndex, structureIndex, $event.target.value)"
+                      class="text-xs font-medium pr-8 pl-3 py-1 rounded-full border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                      :class="getFrequencySelectClass(structure.frequency)"
+                    >
+                      <option 
+                        v-for="freq in feeFrequencies" 
+                        :key="freq.value"
+                        :value="freq.value"
+                        class="text-gray-800"
+                      >
+                        {{ freq.label }}
+                      </option>
+                    </select>
+                    <div class="custom-select-arrow">
+                      <svg class="w-3 h-3 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-1">
+                  <span class="text-xs text-gray-500">Total: ₹{{ calculateStructureTotal(classIndex, structureIndex).toLocaleString() }}</span>
+                  <button 
+                    v-if="feeStructures[classIndex].length > 1"
+                    @click="removeStructure(classIndex, structureIndex)"
+                    class="text-red-400 hover:text-red-600 transition-colors p-1"
+                    title="Remove structure"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
               
               <!-- Fee Components for this Structure -->
               <div class="space-y-2">
@@ -251,14 +208,14 @@
     </div>
 
     <!-- Summary -->
-    <div v-if="selectedInstitutionType && classes.length > 0" class="summary-section">
+    <div v-if="classes.length > 0" class="summary-section">
       <h4 class="text-md font-semibold text-gray-800 mb-3">Summary</h4>
       <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div class="text-center">
-            <div class="text-2xl font-bold text-blue-600">{{ selectedInstitutionType === 'school' ? '🏫' : '🎓' }}</div>
+            <div class="text-2xl font-bold text-blue-600">{{ institutionType === 'school' ? '🏫' : '🎓' }}</div>
             <div class="text-gray-600 mt-1">Institution</div>
-            <div class="font-semibold text-gray-800 capitalize">{{ selectedInstitutionType }}</div>
+            <div class="font-semibold text-gray-800 capitalize">{{ institutionType }}</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-green-600">{{ classes.length }}</div>
@@ -286,7 +243,7 @@
     </div>
 
     <!-- Empty State -->
-    <div v-if="selectedInstitutionType && classes.length === 0" class="text-center py-8">
+    <div v-if="classes.length === 0" class="text-center py-8">
       <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
         <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -306,7 +263,6 @@ export default {
   },
   data() {
     return {
-      selectedInstitutionType: '',
       selectedTemplates: {},
       newCategoryInputs: [],
       newAmountInputs: [],
@@ -385,6 +341,9 @@ export default {
   computed: {
     classes() {
       return this.values.classes || []
+    },
+    institutionType() {
+      return this.values.selectedInstitution || 'school'
     }
   },
   watch: {
@@ -412,16 +371,17 @@ export default {
     }
   },
   methods: {
-  getFrequencySelectClass(frequency) {
-    const classes = {
-      'Monthly': 'border-blue-200 text-blue-800 bg-blue-50',
-      'Quarterly': 'border-purple-200 text-purple-800 bg-purple-50',
-      'Semi-Annually': 'border-orange-200 text-orange-800 bg-orange-50',
-      'Annually': 'border-green-200 text-green-800 bg-green-50',
-      'Term-Wise': 'border-red-200 text-red-800 bg-red-50'
-    }
-    return classes[frequency] || 'border-gray-200 text-gray-800 bg-gray-50'
-  },
+    getFrequencySelectClass(frequency) {
+      const classes = {
+        'Monthly': 'border-blue-200 text-blue-800 bg-blue-50',
+        'Quarterly': 'border-purple-200 text-purple-800 bg-purple-50',
+        'Semi-Annually': 'border-orange-200 text-orange-800 bg-orange-50',
+        'Annually': 'border-green-200 text-green-800 bg-green-50',
+        'Term-Wise': 'border-red-200 text-red-800 bg-red-50'
+      }
+      return classes[frequency] || 'border-gray-200 text-gray-800 bg-gray-50'
+    },
+    
     getFrequencyBadgeClass(frequency) {
       const classes = {
         'Monthly': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -431,12 +391,6 @@ export default {
         'Term-Wise': 'bg-red-100 text-red-800 border-red-200'
       }
       return classes[frequency] || 'bg-gray-100 text-gray-800 border-gray-200'
-    },
-    
-    selectInstitutionType(type) {
-      this.selectedInstitutionType = type
-      this.selectedTemplates = {}
-      this.feeStructures = this.classes.map(() => [])
     },
     
     toggleTemplate(templateName) {
@@ -469,7 +423,7 @@ export default {
         const newStructures = selectedTemplateNames
           .filter(templateName => !filteredStructures.some(s => s.templateName === templateName))
           .map(templateName => {
-            const template = this.feeStructureTemplates[this.selectedInstitutionType]
+            const template = this.feeStructureTemplates[this.institutionType]
               .find(t => t.name === templateName)
             
             return {
@@ -684,10 +638,6 @@ select::-ms-expand {
   right: 0.5rem;
   top: 50%;
   transform: translateY(-50%);
-}
-
-.institution-card:hover {
-  transform: translateY(-1px);
 }
 
 .template-card:hover {

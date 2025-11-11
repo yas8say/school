@@ -1,0 +1,1 @@
+import{_ as o,e as s,d as n,f as e}from"./vendor.34cecf26.js";const t={},c={class:"forgot-password"},a=e("h1",null,"SignUp Page",-1),r=e("p",null,"functionality coming soon...",-1),_=[a,r];function i(d,f){return n(),s("div",c,_)}var p=o(t,[["render",i]]);export{p as default};

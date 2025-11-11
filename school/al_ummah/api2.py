@@ -2154,7 +2154,7 @@ from PIL import Image
 #         return None
 
 @frappe.whitelist()
-def get_student_attendance_records(based_on, date=None, student_group=None, calculate_count_data=False, course_schedule=None):
+def get_student_attendance_records(based_on, date=None, student_group=None, calculate_count_data=False, course_schedule=None, get_courses=False):
     """Main entrypoint — delegates to appropriate function based on flag."""
     if not frappe.session.user:
         return []
@@ -2165,11 +2165,243 @@ def get_student_attendance_records(based_on, date=None, student_group=None, calc
 
     if calculate_count_data:
         return get_detailed_student_data(student_group, date, course_schedule)
-    else:
-        data = get_basic_student_data(student_group)
-        # print(data)
+    elif get_courses:
+        data = get_basic_student_data_with_courses(student_group)
+        print(data)
+        # Use the new function that includes courses (without attendance data)
         return data
+    else:
+        # Use the original function without courses and without attendance data
+        return get_basic_student_data(student_group)
 
+@frappe.whitelist()
+def get_program_courses_from_student_group(student_group_name):
+    """Get program and courses from student group"""
+    try:
+        # 1. Get the Student Group document
+        sg = frappe.get_doc("Student Group", student_group_name)
+
+        if not sg.program:
+            return {
+                "program": None,
+                "program_name": None,
+                "courses": []
+            }
+
+        # 2. Get the Program document using the program value from Student Group
+        program = frappe.get_doc("Program", sg.program)
+
+        # 3. Extract all child table entries (Program Course)
+        courses = []
+        for row in program.courses:
+            courses.append({
+                "course": row.course,
+                "course_name": row.course_name,
+                "credit": getattr(row, "credit", None),     # safe — prevents missing field errors
+                "required": getattr(row, "required", None), # safe
+            })
+
+        # 4. Return result
+        return {
+            "program": program.name,
+            "program_name": program.program_name,
+            "courses": courses,
+        }
+    except Exception as e:
+        frappe.log_error(f"Error getting program courses for {student_group_name}: {str(e)}")
+        return {
+            "program": None,
+            "program_name": None,
+            "courses": []
+        }
+
+@frappe.whitelist()
+def get_basic_student_data_with_courses(student_group):
+    """Return student data with course enrollments in a single query."""
+    
+    from frappe.query_builder import DocType
+
+    StudentGroupStudent = DocType("Student Group Student")
+    Student = DocType("Student")
+    CourseEnrollment = DocType("Course Enrollment")
+
+    # Step 1: Get program courses first
+    program_courses_data = get_program_courses_from_student_group(student_group)
+    program_courses = program_courses_data.get("courses", [])
+    program_course_codes = [course["course"] for course in program_courses]
+
+    # Step 2: Single query to get students with their course enrollments
+    student_data = (
+        frappe.qb.from_(StudentGroupStudent)
+        .inner_join(Student)
+        .on(StudentGroupStudent.student == Student.name)
+        .left_join(CourseEnrollment)
+        .on(
+            (CourseEnrollment.student == StudentGroupStudent.student) 
+            & (CourseEnrollment.course.isin(program_course_codes))  # Only program courses
+            # Removed: & (CourseEnrollment.docstatus == 1)
+        )
+        .select(
+            StudentGroupStudent.student,
+            StudentGroupStudent.student_name,
+            StudentGroupStudent.group_roll_number,
+            Student.image.as_("img_url"),
+            CourseEnrollment.course,
+            CourseEnrollment.course.as_("enrolled_course")  # Alias to avoid conflict
+        )
+        .where(
+            (StudentGroupStudent.parent == student_group)
+            & (StudentGroupStudent.active == 1)
+        )
+        .orderby(StudentGroupStudent.group_roll_number)
+        .orderby(CourseEnrollment.course)
+    ).run(as_dict=True)
+
+    # Step 3: Group the results by student
+    students_dict = {}
+    for row in student_data:
+        student_id = row["student"]
+        if student_id not in students_dict:
+            students_dict[student_id] = {
+                "student": row["student"],
+                "student_name": row["student_name"],
+                "group_roll_number": row["group_roll_number"],
+                "img_url": row["img_url"],
+                "courses": []
+            }
+        
+        # Add course if it exists (LEFT JOIN might return NULL courses)
+        if row["enrolled_course"]:
+            # Find course details from program courses
+            course_details = next(
+                (c for c in program_courses if c["course"] == row["enrolled_course"]), 
+                None
+            )
+            if course_details:
+                students_dict[student_id]["courses"].append({
+                    "course": course_details["course"],
+                    "course_name": course_details.get("course_name", course_details["course"])
+                })
+
+    # Convert back to list
+    student_list = list(students_dict.values())
+
+    # Step 4: Return data
+    return {
+        "students": student_list,
+        "courses": program_courses,
+        "program": program_courses_data.get("program"),
+        "program_name": program_courses_data.get("program_name")
+    }
+
+@frappe.whitelist()
+def remove_courses_from_students(students, student_group=None, program_id=None):
+    """
+    Remove courses from students by deleting Course Enrollment records
+    """
+    import json
+    
+    try:
+        # Parse input data
+        if isinstance(students, str):
+            students_data = json.loads(students)
+        else:
+            students_data = students
+        
+        print(f"=== REMOVING COURSES ===")
+        print(f"Students: {len(students_data)}")
+        print(f"Student Group: {student_group}")
+        print(f"Program: {program_id}")
+        
+        results = {
+            "success": True,
+            "deleted_enrollments": 0,
+            "students_processed": 0,
+            "errors": [],
+            "details": []
+        }
+        
+        for student_data in students_data:
+            student_id = student_data.get('student')
+            student_name = student_data.get('student_name', 'Unknown')
+            courses_to_remove = student_data.get('courses', [])
+            
+            if not student_id or not courses_to_remove:
+                continue
+            
+            student_result = {
+                "student": student_id,
+                "student_name": student_name,
+                "courses_removed": [],
+                "courses_not_found": [],
+                "errors": []
+            }
+            
+            print(f"\nProcessing: {student_name} ({student_id})")
+            print(f"Removing courses: {courses_to_remove}")
+            
+            for course_code in courses_to_remove:
+                try:
+                    # Build filters for finding the enrollment
+                    filters = {
+                        "student": student_id,
+                        "course": course_code
+                    }
+                    
+                    # Add program filter if provided
+                    if program_id:
+                        filters["program"] = program_id
+                    
+                    # Find the enrollment
+                    enrollment_name = frappe.db.get_value("Course Enrollment", filters, "name")
+                    
+                    if enrollment_name:
+                        # Delete the enrollment
+                        frappe.delete_doc("Course Enrollment", enrollment_name)
+                        results["deleted_enrollments"] += 1
+                        student_result["courses_removed"].append(course_code)
+                        print(f"  ✓ Removed: {course_code}")
+                    else:
+                        student_result["courses_not_found"].append(course_code)
+                        print(f"  ⚠ Not found: {course_code}")
+                        
+                except Exception as e:
+                    error_msg = f"Error removing {course_code}: {str(e)}"
+                    student_result["errors"].append(error_msg)
+                    results["errors"].append(error_msg)
+                    print(f"  ✗ {error_msg}")
+            
+            results["students_processed"] += 1
+            results["details"].append(student_result)
+        
+        # Prepare response message
+        if results["deleted_enrollments"] > 0:
+            results["message"] = f"Successfully removed {results['deleted_enrollments']} course enrollments from {results['students_processed']} students"
+        else:
+            results["message"] = "No course enrollments were removed"
+            
+        if results["errors"]:
+            results["message"] += f". {len(results['errors'])} errors occurred."
+        
+        print(f"\n=== COMPLETED ===")
+        print(f"Deleted: {results['deleted_enrollments']} enrollments")
+        print(f"Students processed: {results['students_processed']}")
+        print(f"Errors: {len(results['errors'])}")
+        
+        return results
+        
+    except Exception as e:
+        error_msg = f"Failed to process course removal: {str(e)}"
+        frappe.log_error(f"remove_courses_from_students error: {error_msg}")
+        print(f"✗ {error_msg}")
+        
+        return {
+            "success": False,
+            "message": error_msg,
+            "deleted_enrollments": 0,
+            "students_processed": 0,
+            "errors": [error_msg]
+        }
 
 # ---------------------- BASIC STUDENT DATA ---------------------- #
 import frappe

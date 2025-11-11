@@ -1,10 +1,37 @@
 <template>
-  <div class="p-4 max-w-4xl mx-auto">
-    <div v-if="currentStep < steps.length">
-      <h2 class="text-2xl font-semibold mb-6">{{ steps[currentStep].title }}</h2>
+  <div class="enrollment-container">
+    <!-- Floating Navigation Buttons -->
+    <div class="floating-navigation">
+      <button
+        v-if="currentStep > 0"
+        @click="prevStep"
+        class="nav-button back-button"
+      >
+        <svg class="button-icon" viewBox="0 0 24 24">
+          <path fill="currentColor" d="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z" />
+        </svg>
+        Back
+      </button>
+      <div v-else class="back-button-placeholder"></div>
+      <button
+        @click="nextStep"
+        class="nav-button next-button"
+        :disabled="isSubmitting || quickSetupResource.loading"
+      >
+        {{ currentStep === steps.length - 1 ? (isSubmitting ? 'Submitting...' : 'Submit') : 'Next' }}
+        <svg class="button-icon" viewBox="0 0 24 24">
+          <path fill="currentColor" d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+        </svg>
+      </button>
+    </div>
+
+    <div v-if="currentStep < steps.length" class="scroll-view-content">
+      <div class="header">
+        <h2 class="title">{{ steps[currentStep].title }}</h2>
+      </div>
 
       <!-- Missing Fields Alert -->
-      <div v-if="missingFields.length > 0 && showMissingFields" class="missing-fields-alert">
+      <div v-if="missingFields.length > 0 && showMissingFields" class="missing-fields-alert form-card">
         <div class="alert-header">
           <div class="alert-icon">
             <svg class="icon" viewBox="0 0 24 24">
@@ -29,70 +56,54 @@
         </div>
       </div>
 
-      <component
-        :is="steps[currentStep].component"
-        :values="formValues"
-        :previousDataList="previousDataList"
-        @update-field="updateField"
-        @update-field-array="updateFieldArray"
-        @submit-email="submitEmailAccount"
-        @auto-create-terms="autoCreateTerms"
-        @auto-create-classes="autoCreateClasses" 
-        @use-previous-data="usePreviousData"
-        @grading-completed="handleGradingCompleted"
-        class="mb-6"
-      />
-
-      <div class="flex justify-between gap-4">
-        <button
-          v-if="currentStep > 0"
-          @click="prevStep"
-          class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-        >
-          Back
-        </button>
-        <button
-          @click="nextStep"
-          class="ml-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          :disabled="isSubmitting || quickSetupResource.loading"
-        >
-          {{ currentStep === steps.length - 1 ? (isSubmitting ? 'Submitting...' : 'Submit') : 'Next' }}
-        </button>
+      <div class="form-card">
+        <component
+          :is="steps[currentStep].component"
+          :values="formValues"
+          :previousDataList="previousDataList"
+          @update-field="updateField"
+          @update-field-array="updateFieldArray"
+          @submit-email="submitEmailAccount"
+          @auto-create-terms="autoCreateTerms"
+          @auto-create-classes="autoCreateClasses" 
+          @use-previous-data="usePreviousData"
+          @grading-completed="handleGradingCompleted"
+        />
       </div>
     </div>
 
     <!-- Loading Screen -->
-    <div v-if="isSubmitting" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <h3 class="text-lg font-medium text-gray-900">Submitting your data...</h3>
-        <p class="mt-2 text-sm text-gray-500">Please wait while we process your information.</p>
+    <div v-if="isSubmitting" class="loading-overlay">
+      <div class="loading-modal">
+        <div class="loading-spinner"></div>
+        <h3 class="loading-title">Submitting your data...</h3>
+        <p class="loading-description">Please wait while we process your information.</p>
       </div>
     </div>
 
     <!-- Success/Failure Message -->
-    <div v-if="showResultMessage" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
-        <div v-if="submitSuccess" class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-          <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div v-if="showResultMessage" class="modal-overlay">
+      <div class="result-modal">
+        <div v-if="submitSuccess" class="success-icon">
+          <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <div v-else class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-          <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div v-else class="error-icon">
+          <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </div>
-        <h3 class="mt-3 text-lg font-medium text-gray-900">
+        <h3 class="result-title">
           {{ submitSuccess ? 'Form Submitted Successfully!' : 'Submission Failed' }}
         </h3>
-        <p class="mt-2 text-sm text-gray-500">
+        <p class="result-description">
           {{ submitSuccess ? 'Your data has been successfully processed.' : errorMessage || 'An error occurred while submitting the form.' }}
         </p>
-        <div class="mt-5">
+        <div class="modal-actions">
           <button
             @click="showResultMessage = false"
-            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            class="success-button"
           >
             OK
           </button>
@@ -100,20 +111,22 @@
       </div>
     </div>
 
-    <!-- Original Success Message (now hidden behind modal) -->
-    <div v-if="currentStep >= steps.length && !isSubmitting && !showResultMessage" class="text-center mt-10">
-      <h2 class="text-2xl font-semibold text-green-600">Form Submitted Successfully!</h2>
+    <!-- Success Message -->
+    <div v-if="currentStep >= steps.length && !isSubmitting && !showResultMessage" class="form-card">
+      <div class="header">
+        <h2 class="title">Form Submitted Successfully!</h2>
+        <p class="subtitle">Your data has been successfully processed.</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import { createResource } from 'frappe-ui';
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, onMounted, watch } from 'vue';
 import EmailAccountSetup from './EmailAccountSetup.vue';
 import AcademicYearTerms from './AcademicYearTerms.vue';
 import UsePreviousData from './UsePreviousData.vue';
-import ProgramSelection from './ProgramSelection.vue';
 import SubjectsDivisions from './SubjectsDivisions.vue';
 import GradingSystem from './GradingSystem.vue';
 import FeeStructureCreator from './FeeStructureCreator.vue';
@@ -125,7 +138,6 @@ export default {
     EmailAccountSetup,
     AcademicYearTerms,
     UsePreviousData,
-    ProgramSelection,
     SubjectsDivisions,
     GradingSystem,
     FeeStructureCreator
@@ -150,31 +162,32 @@ export default {
       numberOfTerms: '',
       terms: [],
       selectedTerm: '',
+      selectedInstitution: '',
       classes: [],
       subjects: [],
       divisions: [],
       commonSubjects: [],
       commonDivisions: [],
       dontCreateClasses: false,
-      feeStructures: [], // NEW FIELD
-      setAsCurrent: false, // ADD THIS LINE
+      feeStructures: [],
+      setAsCurrent: false,
       gradingSystem: {
-        selectedOption: '', // 'previous' or 'manual'
+        selectedOption: '',
         scaleName: '',
         previousScaleName: '',
-        gradeData: null // Will be array for manual, null for previous
+        gradeData: null
       },
       gradingCompleted: false
     });
 
+    // Reordered steps: Subjects & Divisions after Use Previous Data, Grading after Subjects
     const steps = ref([
       { title: 'Email Account Setup (Optional)', component: 'EmailAccountSetup' },
       { title: 'Academic Year & Terms', component: 'AcademicYearTerms' },
-      { title: 'Grading System (Optional)', component: 'GradingSystem' }, // Made optional again
       { title: 'Use Previous Data', component: 'UsePreviousData' },
-      { title: 'Select Institution Type & Classes', component: 'ProgramSelection' },
-      { title: 'Create Fee Structures', component: 'FeeStructureCreator' }, // NEW STEP
-      { title: 'Subjects and Divisions', component: 'SubjectsDivisions' }
+      { title: 'Subjects and Divisions', component: 'SubjectsDivisions' },
+      { title: 'Grading System', component: 'GradingSystem' },
+      { title: 'Create Fee Structures', component: 'FeeStructureCreator' }
     ]);
 
     // API Resources
@@ -230,7 +243,6 @@ export default {
 
     // Methods
     function handleGradingCompleted() {
-      // Mark grading as completed and move to next step
       formValues.gradingCompleted = true;
       nextStep();
     }
@@ -338,21 +350,45 @@ export default {
       formValues.terms = terms;
     }
 
-    function usePreviousData(selectedData) {
-      if (!selectedData?.json_data) {
-        console.error('Invalid or missing previous data');
-        return;
-      }
+function usePreviousData(selectedData) { // 🆕 ADD 'function' keyword
+  console.log('📥 USE_PREVIOUS_DATA: Selected data received', selectedData);
+  
+  if (!selectedData?.json_data) {
+    console.error('❌ Invalid or missing previous data');
+    return;
+  }
 
-      try {
-        const parsedData = JSON.parse(selectedData.json_data);
-        formValues.classes = parsedData.classes || [];
-        formValues.subjects = parsedData.subjects || [];
-      } catch (error) {
-        console.error('Error parsing previous data:', error);
-        alert('Failed to load previous data. Please try another selection.');
-      }
-    }
+  try {
+    const parsedData = JSON.parse(selectedData.json_data);
+    console.log('📊 Parsed previous data:', {
+      classes: parsedData.classes,
+      commonSubjects: parsedData.commonSubjects,
+      commonDivisions: parsedData.commonDivisions,
+      divisions: parsedData.divisions
+    });
+
+    // Load classes
+    formValues.classes = parsedData.classes || [];
+    
+    // CRITICAL FIX: Load common data from previous data
+    formValues.commonSubjects = parsedData.commonSubjects || [];
+    formValues.commonDivisions = parsedData.commonDivisions || [];
+    
+    // Also update subjects and divisions arrays if they exist
+    formValues.subjects = parsedData.subjects || [];
+    formValues.divisions = parsedData.divisions || [];
+
+    console.log('✅ Updated formValues:', {
+      classes: formValues.classes,
+      commonSubjects: formValues.commonSubjects,
+      commonDivisions: formValues.commonDivisions
+    });
+
+  } catch (error) {
+    console.error('❌ Error parsing previous data:', error);
+    alert('Failed to load previous data. Please try another selection.');
+  }
+}
 
     function nextStep() {
       if (currentStep.value < steps.value.length - 1) {
@@ -377,7 +413,6 @@ export default {
       errorMessage.value = '';
       showMissingFields.value = false;
 
-      // Grading system is optional, so remove it from exceptions check
       const exceptions = ['selectedTerm', 'commonSubjects', 'commonDivisions', 'divisions', 'institutionName', 'logo', 'dontCreateClasses', 'subjects', 'terms', 'email', 'googleAppPassword', 'classes', 'gradingSystem', 'gradingCompleted', 'setAsCurrent'];
       const missing = checkMissingFields(formValues, exceptions);
 
@@ -442,6 +477,47 @@ export default {
     onMounted(() => {
       fetchPreviousData();
     });
+        // 🆕 ADD DEBUG WATCHERS HERE - right before return statement
+    // Watch for formValues changes to debug data flow
+    watch(
+      () => formValues.commonDivisions,
+      (newVal) => {
+        console.log('🏠 MAIN COMPONENT: commonDivisions updated:', newVal);
+      },
+      { deep: true }
+    );
+
+    watch(
+      () => formValues.commonSubjects,
+      (newVal) => {
+        console.log('🏠 MAIN COMPONENT: commonSubjects updated:', newVal);
+      },
+      { deep: true }
+    );
+
+    watch(
+      () => formValues.classes,
+      (newVal) => {
+        console.log('🏠 MAIN COMPONENT: classes updated - count:', newVal?.length);
+        if (newVal && newVal.length > 0) {
+          console.log('🏠 MAIN COMPONENT: First class divisions:', newVal[0]?.divisions);
+        }
+      },
+      { deep: true }
+    );
+
+    // 🆕 Also add a watcher for the entire formValues to see everything
+    watch(
+      formValues,
+      (newVal) => {
+        console.log('🏠 MAIN COMPONENT: formValues updated:', {
+          commonSubjects: newVal.commonSubjects,
+          commonDivisions: newVal.commonDivisions,
+          classesCount: newVal.classes?.length
+        });
+      },
+      { deep: true, immediate: true }
+    );
 
     return {
       currentStep,
@@ -474,156 +550,108 @@ export default {
 </script>
 
 <style scoped>
-.form-container {
-  padding: 20px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.form-title {
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.navigation-buttons {
+/* Navigation Container */
+.floating-navigation {
   display: flex;
   justify-content: space-between;
-  margin-top: 20px;
+  align-items: center;
+  width: 100%;
+  padding: 20px 0;
+  gap: 20px;
+  position: sticky;
+  bottom: 0;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  margin-top: auto;
 }
 
-button {
-  padding: 10px 20px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+.back-button-placeholder {
+  min-width: 120px;
+  height: 44px;
+  visibility: hidden;
 }
 
-button:hover {
-  background-color: #45a049;
-}
-
-/* Missing Fields Alert Styles */
-.missing-fields-alert {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 8px;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  animation: slideIn 0.3s ease-out;
-}
-
-.alert-header {
+.nav-button {
   display: flex;
   align-items: center;
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid #ffeaa7;
-}
-
-.alert-icon {
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  color: #856404;
-}
-
-.alert-icon .icon {
-  width: 100%;
-  height: 100%;
-}
-
-.alert-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #856404;
-  margin: 0;
-  flex: 1;
-}
-
-.close-button {
-  background: none;
+  gap: 10px;
+  padding: 12px 25px;
   border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 15px;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
+  min-width: 120px;
+  justify-content: center;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.close-button:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+.back-button {
+  background: #f8fafc;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+  margin-right: auto; /* Push to left */
 }
 
-.close-icon {
-  width: 20px;
-  height: 20px;
-  color: #856404;
+.next-button {
+  background: #3b82f6;
+  color: white;
+  border: 2px solid #3b82f6;
+  margin-left: auto; /* Push to right */
 }
 
-.alert-content {
-  padding: 16px 20px 20px;
-}
-
-.alert-description {
-  color: #856404;
-  margin: 0 0 12px 0;
-  font-size: 0.95rem;
-  line-height: 1.4;
-}
-
-.missing-fields-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.missing-field-item {
-  display: flex;
-  align-items: flex-start;
-  padding: 8px 0;
-  color: #856404;
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.field-bullet {
-  color: #ffc107;
-  font-weight: bold;
-  margin-right: 12px;
-  font-size: 1.1rem;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Responsive Design */
+/* Responsive Navigation */
 @media (max-width: 768px) {
-  .missing-fields-alert {
-    margin-bottom: 20px;
+  .navigation-container {
+    padding: 15px 0;
+    gap: 15px;
   }
   
-  .alert-header {
-    padding: 12px 16px 8px;
+  .back-button-placeholder {
+    min-width: 100px;
+    height: 40px;
+  }
+
+  .nav-button {
+    min-width: 100px;
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navigation-container {
+    padding: 10px 0;
+    gap: 10px;
+  }
+
+  .back-button-placeholder {
+    min-width: 80px;
+    height: 40px;
+  }
+
+  .nav-button {
+    width: auto;
+    min-width: 80px;
+    padding: 10px 15px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 320px) {
+  .navigation-container {
+    padding: 8px 0;
   }
   
-  .alert-content {
-    padding: 12px 16px 16px;
+  .back-button-placeholder {
+    min-width: 70px;
   }
   
-  .alert-title {
-    font-size: 1rem;
-  }
-  
-  .missing-field-item {
-    font-size: 0.85rem;
+  .nav-button {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-width: 70px;
   }
 }
 </style>

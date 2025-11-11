@@ -1,11 +1,21 @@
 # school/al_ummah/delete_all.py
-
 import frappe
+
+# =====================================================
+# ✅ USERS THAT MUST NEVER BE DELETED
+# =====================================================
+EXCLUDED_USERS = ["Administrator", "Guest"]
+
 
 # =====================================================
 # ✅ FAST DELETE (NO background jobs)
 # =====================================================
 def hard_delete(doctype, name):
+    # ✅ Prevent deleting mandatory system users
+    if doctype == "User" and name in EXCLUDED_USERS:
+        print(f"⛔ Skipped protected user: {name}")
+        return True
+
     try:
         frappe.db.delete(doctype, {"name": name})
         return True
@@ -29,6 +39,7 @@ def delete_child_tables(doctype, parent_name):
             child_dt = df.options
             if not child_dt:
                 continue
+
             try:
                 frappe.db.delete(child_dt, {"parent": parent_name})
                 print(f"      🧹 Cleaned child table: {child_dt}")
@@ -55,6 +66,12 @@ def cancel_and_delete_all(doctype):
 
     for i, d in enumerate(docs, start=1):
         name = d.name
+
+        # ✅ Prevent deleting mandatory users
+        if doctype == "User" and name in EXCLUDED_USERS:
+            print(f"⛔ Skipped protected user: {name}")
+            continue
+
         try:
             doc = frappe.get_doc(doctype, name)
 
@@ -97,28 +114,35 @@ def clear_academic_settings():
 
 
 # =====================================================
-# ✅ SAFE USER DELETE
+# ✅ SAFE USER DELETE (WITH ADMIN & GUEST PROTECTION)
 # =====================================================
 def safe_delete_user(user_id):
-    if not user_id or user_id.lower() == "administrator":
+    if not user_id:
+        return
+
+    # ✅ Do not delete Admin or Guest
+    if user_id in EXCLUDED_USERS:
+        print(f"⛔ Skipped protected user: {user_id}")
         return
 
     is_sys_mgr = frappe.db.exists("Has Role", {"parent": user_id, "role": "System Manager"})
-    other_mgrs = frappe.get_all("Has Role",
-                                filters={"role": "System Manager", "parent": ["!=", user_id]})
+    other_mgrs = frappe.get_all(
+        "Has Role",
+        filters={"role": "System Manager", "parent": ["!=", user_id]}
+    )
 
-    # Avoid deleting the last system manager
+    # ✅ Avoid deleting the last System Manager
     if is_sys_mgr and not other_mgrs:
         print(f"⚠️ Cannot delete {user_id}: last System Manager")
         return
 
     try:
-        # Remove child tables under user
         delete_child_tables("User", user_id)
 
         frappe.delete_doc("User", user_id, force=True, ignore_permissions=True)
         frappe.db.commit()
         print(f"✅ Deleted User: {user_id}")
+
     except Exception as e:
         print(f"❌ Error deleting User {user_id}: {e}")
 
@@ -129,29 +153,30 @@ def safe_delete_user(user_id):
 def delete_students_completely():
     print("\n🔹 Deleting Students and linked Users...")
 
-    students = frappe.get_all("Student", fields=["name", "student_email_id", "name"])
+    students = frappe.get_all("Student", fields=["name", "student_email_id"])
 
     for s in students:
         sid = s.name
         email = s.student_email_id
-        gr = s.name
+        gr = sid  # Student name = GR
 
         try:
-            # ✅ Delete all Student child tables
+            # ✅ Delete child tables first
             delete_child_tables("Student", sid)
 
             # ✅ Delete Student
             hard_delete("Student", sid)
             print(f"✅ Deleted Student: {sid}")
 
-            # ✅ Delete user by GR-Number (if exists)
-            if gr and frappe.db.exists("User", gr):
+            # ✅ Delete user by GR Number (Skip Admin/Guest)
+            if gr and frappe.db.exists("User", gr) and gr not in EXCLUDED_USERS:
                 safe_delete_user(gr)
 
-            # ✅ Delete user by student email
-            if email:
+            # ✅ Delete user by email (Skip Admin/Guest)
+            if email and email not in EXCLUDED_USERS:
                 for u in frappe.get_all("User", filters={"email": email}):
-                    safe_delete_user(u.name)
+                    if u.name not in EXCLUDED_USERS:
+                        safe_delete_user(u.name)
 
         except Exception as e:
             print(f"❌ Failed to delete Student {sid}: {e}")
@@ -185,6 +210,7 @@ DELETE_SEQUENCE = [
     "User Device",
     "Guardian",
     "Employee",
+    "User",       # ✅ Users last — but protected
     "Student"
 ]
 
@@ -222,6 +248,11 @@ def run():
 
     elif choice == "2":
         dt = input("\nEnter DocType name to delete: ").strip()
+
+        # ✅ Stop user from deleting Administrator or Guest
+        if dt == "User":
+            print("⚠️ User deletions will skip: Administrator, Guest")
+
         print(f"\n🚀 Deleting all records of: {dt}\n")
 
         if dt == "Student":

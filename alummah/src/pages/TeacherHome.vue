@@ -152,95 +152,126 @@
             </p>
           </div>
 
-          <!-- Navigation Buttons -->
-          <div class="space-y-3">
-            <h3 class="text-sm font-medium text-gray-700">Navigation</h3>
-            <nav class="space-y-2">
-              <button
-                @click="setActiveView('dashboard')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'dashboard' 
-                    ? 'bg-blue-100 border border-blue-200 text-blue-800' 
-                    : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-                ]"
-                :disabled="userDetailsResource.loading"
-              >
-                <HomeIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Dashboard</span>
-              </button>
+    <!-- Navigation Buttons -->
+    <div class="space-y-3">
+      <h3 class="text-sm font-medium text-gray-700">Navigation</h3>
+      <nav class="space-y-2">
+        <!-- In the navigation section, add this button -->
 
-              <button
-                @click="setActiveView('attendance')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'attendance' 
-                    ? 'bg-blue-100 border border-blue-200 text-blue-800' 
-                    : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-                ]"
-                :disabled="!selectedGroup || userDetailsResource.loading"
-              >
-                <ClipboardDocumentListIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Take Attendance</span>
-              </button>
+        <button
+          @click="setActiveView('dashboard')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'dashboard' 
+              ? 'bg-blue-100 border border-blue-200 text-blue-800' 
+              : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+          ]"
+          :disabled="userDetailsResource.loading"
+        >
+          <HomeIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Dashboard</span>
+        </button>
 
-              <button
-                @click="setActiveView('attendance-record')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'attendance-record' 
-                    ? 'bg-green-100 border border-green-200 text-green-800' 
-                    : 'bg-green-50 text-green-800 hover:bg-green-100'
-                ]"
-                :disabled="!selectedGroup || userDetailsResource.loading"
-              >
-                <UserGroupIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Student Record</span>
-              </button>
+        <button
+          @click="setActiveView('attendance')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'attendance' 
+              ? 'bg-blue-100 border border-blue-200 text-blue-800' 
+              : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <ClipboardDocumentListIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Take Attendance</span>
+        </button>
 
-              <button
-                @click="setActiveView('create-notice')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'create-notice' 
-                    ? 'bg-yellow-100 border border-yellow-200 text-yellow-800' 
-                    : 'bg-yellow-50 text-yellow-800 hover:bg-yellow-100'
-                ]"
-                :disabled="!selectedGroup || userDetailsResource.loading"
-              >
-                <PlusCircleIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Create Notice</span>
-              </button>
+        <!-- ADD PROMOTION BUTTON HERE -->
+        <button
+          @click="setActiveView('promotion')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'promotion' 
+              ? 'bg-green-100 border border-green-200 text-green-800' 
+              : 'bg-green-50 text-green-800 hover:bg-green-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <AcademicCapIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Promote Students</span>
+        </button>
 
-              <button
-                @click="setActiveView('previous-notices')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'previous-notices' 
-                    ? 'bg-purple-100 border border-purple-200 text-purple-800' 
-                    : 'bg-purple-50 text-purple-800 hover:bg-purple-100'
-                ]"
-                :disabled="!selectedGroup || userDetailsResource.loading"
-              >
-                <DocumentTextIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Previous Notices</span>
-              </button>
+        <button
+          @click="setActiveView('remove-courses')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'remove-courses' 
+              ? 'bg-red-100 border border-red-200 text-red-800' 
+              : 'bg-red-50 text-red-800 hover:bg-red-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <MinusCircleIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Remove Courses</span>
+        </button>
 
-              <button
-                @click="setActiveView('leave-appeals')"
-                :class="[
-                  'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
-                  activeView === 'leave-appeals' 
-                    ? 'bg-indigo-100 border border-indigo-200 text-indigo-800' 
-                    : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
-                ]"
-                :disabled="!selectedGroup || userDetailsResource.loading"
-              >
-                <InboxIcon class="w-5 h-5 flex-shrink-0" />
-                <span class="truncate">Browse Leave Appeals</span>
-              </button>
-            </nav>
-          </div>
+        <button
+          @click="setActiveView('attendance-record')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'attendance-record' 
+              ? 'bg-green-100 border border-green-200 text-green-800' 
+              : 'bg-green-50 text-green-800 hover:bg-green-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <UserGroupIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Student Record</span>
+        </button>
+
+        <button
+          @click="setActiveView('create-notice')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'create-notice' 
+              ? 'bg-yellow-100 border border-yellow-200 text-yellow-800' 
+              : 'bg-yellow-50 text-yellow-800 hover:bg-yellow-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <PlusCircleIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Create Notice</span>
+        </button>
+
+        <button
+          @click="setActiveView('previous-notices')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'previous-notices' 
+              ? 'bg-purple-100 border border-purple-200 text-purple-800' 
+              : 'bg-purple-50 text-purple-800 hover:bg-purple-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <DocumentTextIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Previous Notices</span>
+        </button>
+
+        <button
+          @click="setActiveView('leave-appeals')"
+          :class="[
+            'w-full text-left px-4 py-3 rounded font-medium flex items-center space-x-3 transition-colors text-sm md:text-base',
+            activeView === 'leave-appeals' 
+              ? 'bg-indigo-100 border border-indigo-200 text-indigo-800' 
+              : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
+          ]"
+          :disabled="!selectedGroup || userDetailsResource.loading"
+        >
+          <InboxIcon class="w-5 h-5 flex-shrink-0" />
+          <span class="truncate">Browse Leave Appeals</span>
+        </button>
+      </nav>
+    </div>
 
                           <!-- Logout Button -->
         <div class="pt-4 border-t border-gray-200 flex-shrink-0">
@@ -355,6 +386,9 @@ import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { session } from '@/data/session'
 import { createResource } from 'frappe-ui'
+import { MinusCircleIcon } from '@heroicons/vue/24/outline'
+import RemoveCourses from '@/components/RemoveCoursesPage.vue'
+
 
 // Import Heroicons
 import {
@@ -369,7 +403,8 @@ import {
   ExclamationTriangleIcon,
   Bars3Icon,
   UserIcon,
-  XMarkIcon
+  XMarkIcon,
+  AcademicCapIcon // ADD THIS IMPORT
 } from '@heroicons/vue/24/outline'
 
 // Import Components
@@ -378,6 +413,7 @@ import AttendanceRecord from '@/components/AttendanceRecord.vue'
 import CreateNotice from '@/components/CreateNotice.vue'
 import PreviousNotices from '@/components/PreviousNotices.vue'
 import LeaveAppeals from '@/components/LeaveAppeals.vue'
+import Promotion from '@/components/Promotion.vue' // ADD THIS IMPORT
 
 const router = useRouter()
 
@@ -398,7 +434,9 @@ const componentMap = {
   'attendance-record': AttendanceRecord,
   'create-notice': CreateNotice,
   'previous-notices': PreviousNotices,
-  'leave-appeals': LeaveAppeals
+  'leave-appeals': LeaveAppeals,
+  'promotion': Promotion, // ADD THIS,
+  'remove-courses': RemoveCourses
 }
 
 const getActiveComponent = () => componentMap[activeView.value] || null
