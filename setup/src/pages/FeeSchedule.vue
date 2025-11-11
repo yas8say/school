@@ -34,19 +34,19 @@
         </div>
       </div>
 
-      <!-- Student List Modal -->
-      <div v-if="showStudentList" class="modal-overlay">
-        <div class="modal-content">
-          <StudentList
-            :student-group="selectedStudentGroup"
-            :fee-structures="selectedStructures"
-            :initial-selected-students="getInitialSelections(selectedStudentGroup)"
-            @save="handleStudentListSave"
-            @close="showStudentList = false"
-            @selection-change="handleStudentListSelectionChange"
-          />
-        </div>
-      </div>
+<!-- Student List Modal - Fullscreen with Scroll -->
+<div v-if="showStudentList" class="modal-overlay fullscreen-modal">
+  <div class="modal-content fullscreen-content scrollable-content">
+    <StudentList
+      :student-group="selectedStudentGroup"
+      :fee-structures="selectedStructures"
+      :initial-selected-students="getInitialSelections(selectedStudentGroup)"
+      @save="handleStudentListSave"
+      @close="showStudentList = false"
+      @selection-change="handleStudentListSelectionChange"
+    />
+  </div>
+</div>
 
       <!-- Main Form -->
       <div class="form-card">
@@ -1861,5 +1861,63 @@ function getDocumentUrl(documentName, documentType) {
   color: #6b7280;
   font-style: italic;
   margin-top: 0.25rem;
+}
+/* Fullscreen Modal Styles */
+.fullscreen-modal {
+  padding: 0 !important;
+  align-items: stretch !important;
+}
+
+.fullscreen-content {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+/* Fullscreen Modal with Scroll */
+.fullscreen-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  z-index: 1000;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+.fullscreen-content {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  background: white;
+  position: relative;
+}
+
+.scrollable-content {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Ensure StudentList fills the container */
+.scrollable-content > * {
+  min-height: 100%;
+  width: 100%;
+}
+
+/* Optional: Add some padding for better appearance */
+.scrollable-content {
+  padding: 0;
 }
 </style>

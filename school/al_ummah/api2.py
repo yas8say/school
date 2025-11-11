@@ -2383,11 +2383,6 @@ def remove_courses_from_students(students, student_group=None, program_id=None):
         if results["errors"]:
             results["message"] += f". {len(results['errors'])} errors occurred."
         
-        print(f"\n=== COMPLETED ===")
-        print(f"Deleted: {results['deleted_enrollments']} enrollments")
-        print(f"Students processed: {results['students_processed']}")
-        print(f"Errors: {len(results['errors'])}")
-        
         return results
         
     except Exception as e:

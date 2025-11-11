@@ -316,9 +316,8 @@ watch(() => props.studentGroup, () => {
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
+  display: block;
+  width: 100%;
 }
 
 .student-list-header {
@@ -440,8 +439,6 @@ watch(() => props.studentGroup, () => {
 }
 
 .students-grid {
-  flex: 1;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -679,25 +676,6 @@ watch(() => props.studentGroup, () => {
 
 .clear-button:hover {
   background: #dc2626;
-}
-
-/* Scrollbar styling */
-.students-grid::-webkit-scrollbar {
-  width: 6px;
-}
-
-.students-grid::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 3px;
-}
-
-.students-grid::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-
-.students-grid::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
 }
 
 /* Responsive adjustments */
