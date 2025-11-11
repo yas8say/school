@@ -498,15 +498,27 @@ def get_students_from_group(student_group, academic_year, academic_term=None, st
 
 @frappe.whitelist()
 def get_fee_structures_for_selection(program=None):
-    """Get list of fee structures for frontend selection, optionally filtered by program"""
+    """Get list of fee structures for frontend selection with fee schedules count"""
     try:
+        # Get current academic year
+        current_academic_year = frappe.db.get_single_value("Education Settings", "current_academic_year")
+        
+        if not current_academic_year:
+            return {
+                "success": False,
+                "message": "Current academic year not set in Education Settings",
+                "fee_structures": [],
+                "fee_schedules_count": 0
+            }
+        
         # Build filters
-        filters = {"docstatus": 1}
+        filters = {"docstatus": 1, "academic_year": current_academic_year}
         
         # Add program filter if provided
         if program:
             filters["program"] = program
         
+        # Get fee structures
         fee_structures = frappe.get_all(
             "Fee Structure",
             filters=filters,
@@ -524,15 +536,23 @@ def get_fee_structures_for_selection(program=None):
             )
             structure["components"] = components
         
+        # Get fee schedules count in single query
+        fee_schedules_count = frappe.db.count("Fee Schedule", filters=filters)
+        
         return {
             "success": True,
-            "fee_structures": fee_structures
+            "current_academic_year": current_academic_year,
+            "fee_structures": fee_structures,
+            "fee_schedules_count": fee_schedules_count
         }
+        
     except Exception as e:
+        frappe.log_error(f"Error getting fee structures: {str(e)}")
         return {
             "success": False,
             "message": str(e),
-            "fee_structures": []
+            "fee_structures": [],
+            "fee_schedules_count": 0
         }
 
 

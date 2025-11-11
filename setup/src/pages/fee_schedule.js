@@ -40,9 +40,10 @@
     <StudentList
       :student-group="selectedStudentGroup"
       :fee-structures="selectedStructures"
-      :initial-selections="getInitialSelections(selectedStudentGroup)"
+      :initial-selected-students="getInitialSelections(selectedStudentGroup)"
       @save="handleStudentListSave"
       @close="showStudentList = false"
+      @selection-change="handleStudentListSelectionChange"
     />
   </div>
 </div>
@@ -1136,46 +1137,45 @@ function getDocumentUrl(documentName, documentType) {
     }
 
     // Student List Modal Methods
-  function getInitialSelections(group) {
-  if (!group) return {};
-  
-  const initialSelections = {};
-  const allCategories = getAllFeeCategories();
-  const groupExceptions = studentExceptions.value[group.name] || {};
-  
-  group.students?.forEach(student => {
-    const studentId = student.student;
-    const excludedCategories = groupExceptions[studentId] || [];
-    
-    // Calculate selected categories (all categories minus excluded ones)
-    const selectedCategories = allCategories.filter(cat => 
-      !excludedCategories.includes(cat)
-    );
-    
-    initialSelections[studentId] = selectedCategories;
-  });
-  
-  console.log('🎯 Initial selections for', group.name, ':', initialSelections);
-  return initialSelections;
-}
+    function getInitialSelections(group) {
+      if (!group) return {};
+      
+      const initialSelections = {};
+      const allCategories = getAllFeeCategories();
+      
+      group.students?.forEach(student => {
+        const studentId = student.student;
+        const groupExceptions = studentExceptions.value[group.name] || {};
+        const excludedCategories = groupExceptions[studentId] || [];
+        
+        // Calculate selected categories (all categories minus excluded ones)
+        const selectedCategories = allCategories.filter(cat => 
+          !excludedCategories.includes(cat)
+        );
+        
+        initialSelections[studentId] = selectedCategories;
+      });
+      
+      return initialSelections;
+    }
 
     function openStudentList(group) {
       selectedStudentGroup.value = group;
       showStudentList.value = true;
     }
-function handleStudentListSave(exceptions) {
-  if (selectedStudentGroup.value) {
-    const groupName = selectedStudentGroup.value.name;
-    
-    // Store exceptions in the format: { groupName: { studentId: [excludedCategories] } }
-    studentExceptions.value[groupName] = exceptions;
-    
-    console.log(`💾 Saved fee category exceptions for ${groupName}:`, exceptions);
-    console.log(`📊 Total students with exceptions:`, Object.keys(exceptions).length);
-  }
-  
-  showStudentList.value = false;
-}
+
+    function handleStudentListSave(exceptions) {
+      if (selectedStudentGroup.value) {
+        const groupName = selectedStudentGroup.value.name;
+        
+        // Store exceptions in the format: { groupName: { studentId: [excludedCategories] } }
+        studentExceptions.value[groupName] = exceptions;
+        
+        console.log(`Saved fee category exceptions for ${groupName}:`, exceptions);
+      }
+      
+      showStudentList.value = false;
+    }
 
     function handleStudentListSelectionChange(selectedStudents) {
       // This can be used for real-time updates if needed
@@ -1958,21 +1958,19 @@ function handleStudentListSave(exceptions) {
 /* Info Note Styling */
 .info-note {
   display: flex;
-  align-items: flex-start; /* Changed from flex-start to center for better alignment */
+  align-items: flex-start;
   gap: 0.75rem;
   padding: 1rem;
   background: #f0f9ff;
   border: 1px solid #bae6fd;
   border-radius: 0.5rem;
-  margin: 2rem 0;
+  margin: 1rem 0;
 }
 
 .info-note .note-icon {
   font-size: 1.25rem;
   flex-shrink: 0;
-  /* Remove margin-top and use align-self for consistent alignment */
-  align-self: flex-start;
-  line-height: 1.2; /* Match line height with text */
+  margin-top: 0.125rem;
 }
 
 .info-note .note-content {
@@ -1980,8 +1978,6 @@ function handleStudentListSave(exceptions) {
   color: #0369a1;
   font-size: 0.875rem;
   line-height: 1.4;
-  /* Ensure content aligns properly */
-  align-self: center;
 }
 
 .info-note .note-content strong {

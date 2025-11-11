@@ -5,12 +5,6 @@
       <h3 class="student-list-title">{{ studentGroup.name }} - Fee Category Selection</h3>
       <div class="header-actions">
         <button 
-          @click="saveSelections" 
-          class="save-button"
-        >
-          Save Selections
-        </button>
-        <button 
           @click="$emit('close')" 
           class="close-button"
         >
@@ -29,10 +23,6 @@
         <span class="stat-label">Fee Categories:</span>
         <span class="stat-value">{{ feeCategories.length }}</span>
       </div>
-      <div class="stat-item">
-        <span class="stat-label">Students with Exceptions:</span>
-        <span class="stat-value">{{ getStudentsWithExceptionsCount() }}</span>
-      </div>
     </div>
 
     <!-- Bulk Actions -->
@@ -48,22 +38,10 @@
           Select {{ category.fees_category }} for All
         </button>
         <button 
-          @click="selectAllCategoriesForAll" 
-          class="bulk-category-button"
-        >
-          Select All Categories for All
-        </button>
-        <button 
           @click="deselectAllCategories" 
           class="bulk-clear-button"
         >
           Clear All Selections
-        </button>
-        <button 
-          @click="saveSelections" 
-          class="bulk-save-button"
-        >
-          Save Selections
         </button>
       </div>
     </div>
@@ -133,12 +111,6 @@
             >
               (No fee categories selected)
             </span>
-            <span 
-              v-else-if="getSelectedCategoriesCount(student.student) < feeCategories.length" 
-              class="partial-selection-warning"
-            >
-              ({{ feeCategories.length - getSelectedCategoriesCount(student.student) }} excluded)
-            </span>
           </div>
         </div>
 
@@ -173,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 const props = defineProps({
   studentGroup: {
@@ -194,15 +166,18 @@ const props = defineProps({
 const emit = defineEmits(['save', 'close'])
 
 // Reactive state for student fee category selections
+// Structure: { studentId: [category1, category2, ...] }
 const studentSelections = ref({})
 
 // Computed properties
 const feeCategories = computed(() => {
+  // Combine fee categories from all selected fee structures
   const allCategories = []
   props.feeStructures.forEach(structure => {
     if (structure.components) {
       structure.components.forEach(component => {
-        if (component.fees_category && !allCategories.find(cat => cat.fees_category === component.fees_category)) {
+        // Avoid duplicates
+        if (!allCategories.find(cat => cat.fees_category === component.fees_category)) {
           allCategories.push({
             fees_category: component.fees_category,
             amount: component.amount,
@@ -229,10 +204,12 @@ const toggleCategory = (studentId, category, isSelected) => {
   const currentSelections = studentSelections.value[studentId]
   
   if (isSelected) {
+    // Add category if not already present
     if (!currentSelections.includes(category)) {
       currentSelections.push(category)
     }
   } else {
+    // Remove category
     const index = currentSelections.indexOf(category)
     if (index > -1) {
       currentSelections.splice(index, 1)
@@ -244,21 +221,9 @@ const getSelectedCategoriesCount = (studentId) => {
   return studentSelections.value[studentId]?.length || 0
 }
 
-const getStudentsWithExceptionsCount = () => {
-  return Object.values(studentSelections.value).filter(
-    selections => selections.length < feeCategories.value.length
-  ).length
-}
-
 const selectCategoryForAll = (category) => {
   props.studentGroup.students?.forEach(student => {
     toggleCategory(student.student, category, true)
-  })
-}
-
-const selectAllCategoriesForAll = () => {
-  props.studentGroup.students?.forEach(student => {
-    studentSelections.value[student.student] = feeCategories.value.map(cat => cat.fees_category)
   })
 }
 
@@ -273,21 +238,22 @@ const clearAllSelections = () => {
 }
 
 const saveSelections = () => {
+  // Prepare exceptions data: students with missing fee categories
   const exceptions = {}
   
   props.studentGroup.students?.forEach(student => {
     const studentId = student.student
     const selectedCategories = studentSelections.value[studentId] || []
-    const allCategoryNames = feeCategories.value.map(cat => cat.fees_category)
     
-    // Calculate excluded categories (categories NOT selected)
-    const excludedCategories = allCategoryNames.filter(cat => 
-      !selectedCategories.includes(cat)
-    )
-    
-    // Only include students who have excluded categories
-    if (excludedCategories.length > 0) {
-      exceptions[studentId] = excludedCategories
+    if (selectedCategories.length < feeCategories.value.length) {
+      // Student has some categories unselected - add to exceptions
+      const missingCategories = feeCategories.value
+        .filter(cat => !selectedCategories.includes(cat.fees_category))
+        .map(cat => cat.fees_category)
+      
+      if (missingCategories.length > 0) {
+        exceptions[studentId] = missingCategories
+      }
     }
   })
   
@@ -320,75 +286,31 @@ const handleImageError = (event) => {
   event.target.style.display = 'none'
 }
 
-// Initialization
-const initializeSelections = () => {
-  // If we have meaningful initial selections, use them
-  if (props.initialSelections && Object.keys(props.initialSelections).length > 0) {
-    const hasData = Object.values(props.initialSelections).some(
-      selections => Array.isArray(selections) && selections.length > 0
-    )
-    
-    if (hasData) {
-      studentSelections.value = JSON.parse(JSON.stringify(props.initialSelections))
-      return
-    }
-  }
-
-  // Otherwise, initialize with all categories selected
-  studentSelections.value = {}
-  props.studentGroup.students?.forEach(student => {
-    studentSelections.value[student.student] = feeCategories.value.map(cat => cat.fees_category)
-  })
-}
-
 // Lifecycle
 onMounted(() => {
-  initializeSelections()
+  // Initialize with initial selections if provided
+  if (props.initialSelections && Object.keys(props.initialSelections).length > 0) {
+    studentSelections.value = { ...props.initialSelections }
+  } else {
+    // Initialize with all categories selected for all students
+    props.studentGroup.students?.forEach(student => {
+      studentSelections.value[student.student] = feeCategories.value.map(cat => cat.fees_category)
+    })
+  }
 })
 
-// Watch for prop changes
-watch(() => props.initialSelections, (newSelections) => {
-  if (newSelections && Object.keys(newSelections).length > 0) {
-    initializeSelections()
-  }
-}, { deep: true })
-
+// Watch for changes in student group
 watch(() => props.studentGroup, () => {
-  initializeSelections()
-}, { deep: true })
-
-watch(() => props.feeStructures, () => {
-  nextTick(() => {
-    initializeSelections()
+  // Reset selections when student group changes
+  studentSelections.value = {}
+  // Initialize with all categories selected for all students
+  props.studentGroup.students?.forEach(student => {
+    studentSelections.value[student.student] = feeCategories.value.map(cat => cat.fees_category)
   })
 }, { deep: true })
 </script>
 
 <style scoped>
-/* Add this new style for partial selection warning */
-.partial-selection-warning {
-  font-size: 0.75rem;
-  color: #d97706;
-  font-weight: 500;
-}
-
-.bulk-save-button {
-  padding: 0.5rem 1rem;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.bulk-save-button:hover {
-  background: #059669;
-}
-
-/* Your existing styles remain the same */
 .student-list-container {
   background: white;
   border-radius: 12px;
