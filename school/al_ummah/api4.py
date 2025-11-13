@@ -936,7 +936,7 @@ def process_student_payment(student_id, invoice_names, mode_of_payment, paid_to_
         # ✅ Step 1: Resolve Student ID (handle both ID and GR Number)
         # -----------------------------------------------------
         resolved_student_id = None
-
+        student_id = f"GR-{student_id}"
         # Case 1 → Direct student ID exists
         if frappe.db.exists("Student", student_id):
             resolved_student_id = student_id
@@ -1048,53 +1048,81 @@ def process_student_payment(student_id, invoice_names, mode_of_payment, paid_to_
         frappe.db.rollback()
         frappe.throw(str(e))
 
+# def generate_pdf_download_url(payment_entry_name):
+#     """
+#     Simple approach with direct port removal
+#     """
+#     try:
+#         from frappe.utils import get_url
+#         import re
+        
+#         # Ensure payment_entry_name is a string
+#         if isinstance(payment_entry_name, dict):
+#             payment_entry_name = payment_entry_name.get('payment_entry')
+        
+#         if not payment_entry_name or not frappe.db.exists("Payment Entry", payment_entry_name):
+#             return None
+        
+#         # Your custom printview URL
+#         printview_url_path = f"/printview?" \
+#                            f"doctype=Payment%20Entry&" \
+#                            f"name={payment_entry_name}&" \
+#                            f"trigger_print=1&" \
+#                            f"format=test&" \
+#                            f"no_letterhead=1&" \
+#                            f"letterhead=No%20Letterhead&" \
+#                            f"settings=%7B%7D&" \
+#                            f"_lang=en"
+        
+#         # Get URL and remove port using regex
+#         full_url = get_url(printview_url_path)
+#         clean_url = re.sub(r':\d+', '', full_url)  # Remove :8000, :8080, etc.
+        
+#         print(f"Clean URL without port: {clean_url}")
+#         return clean_url
+        
+#     except Exception as e:
+#         frappe.log_error(f"Error: {str(e)}")
+#         return None
+
 def generate_pdf_download_url(payment_entry_name):
     """
-    Generate Printview URL for the payment entry using 'test' print format
+    Generate mobile-compatible PDF download URL
     """
     try:
         from frappe.utils import get_url
-        from urllib.parse import urlparse, urlunparse
+        import re
         
-        # Ensure payment_entry_name is a string, not a dict
         if isinstance(payment_entry_name, dict):
-            # Extract the actual payment entry name from the dictionary
             payment_entry_name = payment_entry_name.get('payment_entry')
         
-        # Validate that we have a proper payment entry name
-        if not payment_entry_name:
-            frappe.log_error("No payment entry name provided for PDF generation")
+        if not payment_entry_name or not frappe.db.exists("Payment Entry", payment_entry_name):
             return None
         
-        # Construct the printview URL with all required parameters
-        printview_url_path = f"/printview?" \
-                           f"doctype=Payment%20Entry&" \
-                           f"name={payment_entry_name}&" \
-                           f"trigger_print=1&" \
-                           f"format=test&" \
-                           f"no_letterhead=1&" \
-                           f"letterhead=No%20Letterhead&" \
-                           f"settings=%7B%7D&" \
-                           f"_lang=en"
+        # Create a simpler URL that's more likely to work on mobile
+        pdf_url_path = f"/api/method/frappe.utils.print_format.download_pdf"
         
-        # Get the full URL
-        full_url = get_url(printview_url_path)
+        # Build the full URL with parameters
+        from urllib.parse import urlencode
+        params = {
+            'doctype': 'Payment Entry',
+            'name': payment_entry_name,
+            'format': 'test',
+            'no_letterhead': 1,
+            'letterhead': 'No Letterhead',
+            'orientation': 'Landscape',
+            'force_download': 1
+        }
         
-        # Remove ANY port number regardless of what it is
-        parsed_url = urlparse(full_url)
-        clean_url = urlunparse((
-            parsed_url.scheme,
-            parsed_url.hostname,  # This excludes the port completely
-            parsed_url.path,
-            parsed_url.params,
-            parsed_url.query,
-            parsed_url.fragment
-        ))
+        query_string = urlencode(params)
+        full_url = f"{get_url(pdf_url_path)}?{query_string}"
+        clean_url = re.sub(r':\d+', '', full_url)
         
+        print(f"Mobile PDF URL: {clean_url}")
         return clean_url
         
     except Exception as e:
-        frappe.log_error(f"Error generating printview URL: {str(e)}")
+        frappe.log_error(f"Error generating PDF URL: {str(e)}")
         return None
         
 def create_payment_entry(invoice_data, mode_of_payment, paid_to_account, paid_amount, 
@@ -1246,64 +1274,180 @@ def get_sales_invoices_by_student(student_id):
             }
 
         # -----------------------------------------------------
-        # ✅ Step 1: Resolve Student ID
+        # Step 1: Resolve Student ID
         # -----------------------------------------------------
 
         resolved_student = None
-
-        # Case 1 → Direct student ID exists
-        if frappe.db.exists("Student", student_id):
-            resolved_student = student_id
-
-        # Case 2 → Maybe 'student_id' is actually a GR Number
-        else:
-            gr_num = f"GR-{student_id}"
-            resolved_student = frappe.db.get_value(
-                "Student",
-                {"name": gr_num},
-                "name"
-            )
-
-        if not resolved_student:
-            return {
-                "success": False,
-                "message": f"No student found for ID/GR Number: {student_id}"
-            }
+        gr_num = f"GR-{student_id}"
+        
+        resolved_student = frappe.db.get_value(
+            "Student",
+            {"name": gr_num},
+            "name"
+        )
 
         # -----------------------------------------------------
-        # ✅ Step 2: Fetch unpaid sales invoices
+        # Step 2: Get Student Data and Group Information
+        # -----------------------------------------------------
+
+        student_data = frappe.db.get_value(
+            "Student",
+            resolved_student,
+            [
+                "name", 
+                "student_name", 
+                "image",
+                "student_email_id", 
+                "student_mobile_number"
+            ],
+            as_dict=True
+        )
+
+        student_groups = frappe.get_all(
+            "Student Group Student",
+            filters={"student": resolved_student},
+            fields=["parent as student_group", "group_roll_number"],
+            order_by="creation desc"
+        )
+
+        # -----------------------------------------------------
+        # Step 3: Get Guardian Information
+        # -----------------------------------------------------
+
+        guardian_details = []
+        
+        # Get guardians using get_doc to access child tables
+        student_doc = frappe.get_doc("Student", resolved_student)
+        
+        # Check if guardians child table exists
+        if hasattr(student_doc, 'guardians') and student_doc.guardians:
+            for guardian_rel in student_doc.guardians:
+                guardian_name = getattr(guardian_rel, 'guardian', None)
+                if not guardian_name:
+                    guardian_name = getattr(guardian_rel, 'guardian_name', None)
+                
+                if guardian_name:
+                    # Get detailed guardian information from Guardian doctype
+                    guardian_info = frappe.db.get_value(
+                        "Guardian",
+                        guardian_name,
+                        [
+                            "name",
+                            "guardian_name", 
+                            "email_address", 
+                            "mobile_number",
+                            "education",
+                            "occupation"
+                        ],
+                        as_dict=True
+                    )
+                    
+                    if guardian_info:
+                        guardian_details.append({
+                            "name": guardian_info.name,
+                            "guardian_name": guardian_info.guardian_name,
+                            "email_address": guardian_info.email_address,
+                            "mobile_number": guardian_info.mobile_number,
+                            "education": guardian_info.education,
+                            "occupation": guardian_info.occupation,
+                            "relation": getattr(guardian_rel, 'relation', 'Guardian')
+                        })
+                    else:
+                        # Fallback: use basic info from child table
+                        guardian_details.append({
+                            "name": guardian_name,
+                            "guardian_name": getattr(guardian_rel, 'guardian_name', guardian_name),
+                            "relation": getattr(guardian_rel, 'relation', 'Guardian')
+                        })
+
+        # Add all data to student_data
+        if student_data:
+            student_data["student_groups"] = student_groups
+            student_data["guardians"] = guardian_details
+
+        # -----------------------------------------------------
+        # Step 4: Fetch unpaid sales invoices with items
         # -----------------------------------------------------
 
         invoices = frappe.get_all(
             "Sales Invoice",
             filters={
                 "student": resolved_student,
-                "docstatus": 1,
+                "docstatus": 1,  # 1 = Submitted
                 "outstanding_amount": [">", 0]
             },
             fields=[
                 "name", "customer", "customer_name", "student",
                 "posting_date", "grand_total", "outstanding_amount",
-                "status", "due_date"
+                "status", "due_date", "company", "currency"
             ],
             order_by="posting_date desc"
         )
 
-        return {
+        # -----------------------------------------------------
+        # Step 5: Get detailed items for each invoice
+        # -----------------------------------------------------
+
+        for invoice in invoices:
+            # Get items for this invoice
+            items = frappe.get_all(
+                "Sales Invoice Item",
+                filters={"parent": invoice.name},
+                fields=[
+                    "name",
+                    "item_code",
+                    "item_name",
+                    "description",
+                    "qty",
+                    "rate",
+                    "amount",
+                    "income_account"
+                ],
+                order_by="idx"
+            )
+            
+            # Add items to invoice
+            invoice["items"] = items
+            
+            # Format currency fields for display
+            invoice["grand_total_formatted"] = f"₹{float(invoice.grand_total or 0):,.2f}"
+            invoice["outstanding_amount_formatted"] = f"₹{float(invoice.outstanding_amount or 0):,.2f}"
+            
+            # Calculate paid amount
+            invoice["paid_amount"] = float(invoice.grand_total or 0) - float(invoice.outstanding_amount or 0)
+            invoice["paid_amount_formatted"] = f"₹{invoice['paid_amount']:,.2f}"
+
+        # -----------------------------------------------------
+        # Step 6: Prepare final response
+        # -----------------------------------------------------
+        
+        response_data = {
             "success": True,
             "student_input": student_id,
             "resolved_student_id": resolved_student,
+            "student_data": student_data,
             "count": len(invoices),
-            "invoices": invoices
+            "invoices": invoices,
+            "summary": {
+                "total_invoices": len(invoices),
+                "total_outstanding": sum(float(inv.outstanding_amount or 0) for inv in invoices),
+                "total_paid": sum(float(inv.get('paid_amount', 0) or 0) for inv in invoices)
+            }
         }
+
+        # Format summary amounts
+        response_data["summary"]["total_outstanding_formatted"] = f"₹{response_data['summary']['total_outstanding']:,.2f}"
+        response_data["summary"]["total_paid_formatted"] = f"₹{response_data['summary']['total_paid']:,.2f}"
+
+        return response_data
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "get_sales_invoices_by_student Error")
         return {
             "success": False,
-            "message": f"Error: {str(e)}"
+            "message": f"Error: {str(e)}",
+            "student_input": student_id
         }
-
 
 @frappe.whitelist(allow_guest=True)
 def verify_razorpay_payment(razorpay_payment_id, razorpay_order_id, razorpay_signature, 
@@ -1363,6 +1507,7 @@ def verify_razorpay_payment(razorpay_payment_id, razorpay_order_id, razorpay_sig
         # -----------------------------------------------------
         resolved_student_id = None
 
+        student_id = f"GR-{student_id}"
         # Case 1 → Direct student ID exists
         if frappe.db.exists("Student", student_id):
             resolved_student_id = student_id

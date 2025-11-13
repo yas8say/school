@@ -1,82 +1,125 @@
 <template>
   <div class="grading-system-container">
     <div class="mb-8">
-      <!-- <h3 class="text-lg font-semibold text-gray-800 mb-2">Grading System Setup</h3> -->
       <p class="text-gray-600">Configure your institution's grading system. This step is optional.</p>
     </div>
 
-    <!-- Option Selection -->
-    <div class="mb-8">
-      <label class="block text-sm font-medium text-gray-700 mb-3">
-        Select Grading System Option
-      </label>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Use Previous Grading Scale -->
-        <div 
-          @click="selectOption('previous')"
-          :class="[
-            'p-6 border-2 rounded-lg cursor-pointer transition-all duration-200',
-            selectedOption === 'previous'
-              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-              : 'border-gray-300 bg-white hover:border-gray-400'
-          ]"
-        >
-          <div class="flex items-start space-x-4">
-            <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div class="flex-1">
-              <h4 class="font-semibold text-gray-900 mb-2">Use Existing Grading Scale</h4>
-              <p class="text-sm text-gray-600 mb-3">Select from previously created grading scales</p>
-              
-              <select
-                v-model="previousScaleName"
-                :disabled="selectedOption !== 'previous'"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :class="{ 'bg-gray-100': selectedOption !== 'previous' }"
-              >
-                <option value="">Select a grading scale</option>
-                <option v-for="scale in gradingScales" :key="scale" :value="scale">
-                  {{ scale }}
-                </option>
-              </select>
-              
-              <div v-if="loadingScales" class="mt-2 text-sm text-gray-500">
-                Loading grading scales...
-              </div>
-              <div v-else-if="gradingScales.length === 0" class="mt-2 text-sm text-gray-500">
-                No previous grading scales found
-              </div>
-            </div>
+ <!-- Option Selection -->
+  <div class="mb-8">
+    <label class="block text-sm font-medium text-gray-700 mb-3">
+      Select Grading System Option
+    </label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Use Previous Grading Scale -->
+      <div 
+        @click="selectOption('previous')"
+        :class="[
+          'p-6 border-2 rounded-lg cursor-pointer transition-all duration-200',
+          selectedOption === 'previous'
+            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+            : 'border-gray-300 bg-white hover:border-gray-400'
+        ]"
+      >
+        <div class="flex items-start space-x-4">
+          <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
           </div>
-        </div>
-
-        <!-- Create New Grading Scale -->
-        <div 
-          @click="selectOption('manual')"
-          :class="[
-            'p-6 border-2 rounded-lg cursor-pointer transition-all duration-200',
-            selectedOption === 'manual'
-              ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
-              : 'border-gray-300 bg-white hover:border-gray-400'
-          ]"
-        >
-          <div class="flex items-start space-x-4">
-            <div class="flex-shrink-0 w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
+          <div class="flex-1">
+            <h4 class="font-semibold text-gray-900 mb-2">Use Existing Grading Scale</h4>
+            <p class="text-sm text-gray-600 mb-3">Select from previously created grading scales</p>
+            
+            <select
+              v-model="previousScaleName"
+              @change="onScaleSelect"
+              :disabled="selectedOption !== 'previous'"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              :class="{ 'bg-gray-100': selectedOption !== 'previous' }"
+            >
+              <option value="">Select a grading scale</option>
+              <option v-for="scale in gradingScales" :key="scale.name" :value="scale.name">
+                {{ scale.grading_scale_name }}
+              </option>
+            </select>
+            
+            <div v-if="loadingScales" class="mt-2 text-sm text-gray-500">
+              Loading grading scales...
             </div>
-            <div class="flex-1">
-              <h4 class="font-semibold text-gray-900 mb-2">Create New Grading Scale</h4>
-              <p class="text-sm text-gray-600">Manually define your grading system</p>
+            <div v-else-if="gradingScales.length === 0" class="mt-2 text-sm text-gray-500">
+              No previous grading scales found
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Create New Grading Scale -->
+      <div 
+        @click="selectOption('manual')"
+        :class="[
+          'p-6 border-2 rounded-lg cursor-pointer transition-all duration-200',
+          selectedOption === 'manual'
+            ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+            : 'border-gray-300 bg-white hover:border-gray-400'
+        ]"
+      >
+        <div class="flex items-start space-x-4">
+          <div class="flex-shrink-0 w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h4 class="font-semibold text-gray-900 mb-2">Create New Grading Scale</h4>
+            <p class="text-sm text-gray-600">Manually define your grading system</p>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
+
+  <!-- Grading Scale Preview (Now outside the option cards) -->
+  <div v-if="selectedOption === 'previous' && selectedScalePreview" class="mb-8">
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <h5 class="text-lg font-semibold text-gray-800">Preview: {{ selectedScalePreview.grading_scale_name }}</h5>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade Code</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Threshold (%)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="(grade, index) in selectedScalePreview.grades" 
+                :key="grade.grade_code" 
+                class="hover:bg-gray-50 transition-colors">
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm font-medium text-gray-900">{{ grade.grade_code }}</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-gray-600">{{ grade.threshold }}% and above</div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="text-sm text-gray-500">{{ grade.description || 'No description' }}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
+        <div class="text-xs text-gray-500">
+          {{ selectedScalePreview.grade_count }} grades • 
+          Updated {{ formatDate(selectedScalePreview.modified) }}
+        </div>
+      </div>
+    </div>
+  </div>
 
     <!-- Manual Grading Setup -->
     <div v-if="selectedOption === 'manual'" class="space-y-6">
@@ -95,7 +138,7 @@
         />
       </div>
 
-      <!-- Quick Templates - Auto-selected based on institution type -->
+      <!-- Quick Templates -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-3">
           Quick Templates (Optional)
@@ -257,6 +300,7 @@ export default {
     const previousScaleName = ref(props.values.gradingSystem?.previousScaleName || '');
     const manualGrades = ref(props.values.gradingSystem?.gradeData || [{ grade_code: '', threshold: '', description: '' }]);
     const gradingScales = ref([]);
+    const selectedScalePreview = ref(null);
     const loadingScales = ref(false);
     const showValidation = ref(false);
 
@@ -273,6 +317,14 @@ export default {
       onSuccess: (data) => {
         if (data.success) {
           gradingScales.value = data.grading_scales || [];
+          
+          // If we have a previously selected scale, show its preview
+          if (previousScaleName.value) {
+            const selectedScale = gradingScales.value.find(scale => scale.name === previousScaleName.value);
+            if (selectedScale) {
+              selectedScalePreview.value = selectedScale;
+            }
+          }
         }
         loadingScales.value = false;
       },
@@ -315,7 +367,6 @@ export default {
 
     // Computed properties
     const filteredInstituteTypes = computed(() => {
-      // Show both templates but highlight the one matching the institution type
       return instituteTypes.value;
     });
 
@@ -353,14 +404,27 @@ export default {
     function selectOption(option) {
       selectedOption.value = option;
       
-      // Auto-apply template when selecting manual and no grades exist
-      if (option === 'manual' && manualGrades.value.length === 1 && !manualGrades.value[0].grade_code) {
-        const recommendedTemplate = instituteTypes.value.find(t => t.value === institutionType.value);
-        if (recommendedTemplate) {
-          applyTemplate(recommendedTemplate);
+      if (option === 'manual') {
+        selectedScalePreview.value = null;
+        // Auto-apply template when selecting manual and no grades exist
+        if (manualGrades.value.length === 1 && !manualGrades.value[0].grade_code) {
+          const recommendedTemplate = instituteTypes.value.find(t => t.value === institutionType.value);
+          if (recommendedTemplate) {
+            applyTemplate(recommendedTemplate);
+          }
         }
       }
       
+      updateFormData();
+    }
+
+    function onScaleSelect() {
+      if (previousScaleName.value) {
+        const selectedScale = gradingScales.value.find(scale => scale.name === previousScaleName.value);
+        selectedScalePreview.value = selectedScale || null;
+      } else {
+        selectedScalePreview.value = null;
+      }
       updateFormData();
     }
 
@@ -389,6 +453,16 @@ export default {
       return !isNaN(num) && num >= 0 && num <= 100 && threshold !== '';
     }
 
+    function formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+
     function debouncedUpdate() {
       clearTimeout(updateTimeout);
       updateTimeout = setTimeout(updateFormData, 300);
@@ -413,7 +487,8 @@ export default {
           selectedOption: selectedOption.value,
           scaleName: scaleName.value,
           previousScaleName: previousScaleName.value,
-          gradeData
+          gradeData,
+          selectedScaleData: selectedScalePreview.value
         }
       });
     }
@@ -462,6 +537,7 @@ export default {
       previousScaleName,
       manualGrades,
       gradingScales,
+      selectedScalePreview,
       loadingScales,
       instituteTypes,
       filteredInstituteTypes,
@@ -471,11 +547,13 @@ export default {
       isFormValid,
       isRecommendedTemplate,
       selectOption,
+      onScaleSelect,
       applyTemplate,
       addGrade,
       removeGrade,
       handleSubmit,
-      debouncedUpdate
+      debouncedUpdate,
+      formatDate
     };
   }
 };
@@ -484,5 +562,17 @@ export default {
 <style scoped>
 .grading-system-container {
   max-width: 100%;
+}
+
+/* Ensure proper spacing in the preview section */
+.space-y-2 > * {
+  margin-bottom: 0.5rem;
+}
+
+/* Improve table responsiveness */
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
 }
 </style>

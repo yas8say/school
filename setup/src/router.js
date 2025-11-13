@@ -23,50 +23,63 @@ const routes = [
     redirect: '/home/quick-setup',
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
+      // In your router configuration
       {
-        path: 'fee-schedule',
+        path: '/home/edit-student',
+        name: 'EditStudent',
+        component: () => import('@/components/EditStudent.vue'), // Make sure this path is correct
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: '/home/students',
+        name: 'Students',
+        component: () => import('./pages/Students.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: '/home/fee-schedule',
         name: 'Fee Schedule',
         component: () => import('@/pages/FeeSchedule.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'fee-payments',
+        path: '/home/fee-payments',
         name: 'Fee Payments',
         component: () => import('@/pages/FeePayments.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'quick-setup',
+        path: '/home/quick-setup',
         name: 'QuickSetup',
         component: () => import('@/pages/QuickSetup.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'upload-students',
+        path: '/home/upload-students',
         name: 'UploadStudents',
         component: () => import('@/pages/UploadStudents.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'add-student',
+        path: '/home/add-student',
         name: 'AddStudent',
         component: () => import('@/pages/AddStudent.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'upload-instructors',
+        path: '/home/upload-instructors',
         name: 'UploadInstructors',
         component: () => import('@/pages/UploadInstructors.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'add-instructor',
+        path: '/home/add-instructor',
         name: 'AddInstructor',
         component: () => import('@/pages/AddInstructor.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
       },
       {
-        path: 'admin-settings',
+        path: '/home/admin-settings',
         name: 'AdminSettings',
         component: () => import('@/pages/AdminSettings.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }

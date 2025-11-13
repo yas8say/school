@@ -1,0 +1,538 @@
+<style>
+    @page {
+        size: A3 landscape;
+        margin: 0.2cm;
+    }
+
+    body {
+        font-family: Arial, sans-serif;
+        font-size: 8.5px; /* Increased from 8px */
+        color: #222;
+        line-height: 1;
+        margin: 0;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .receipt-container {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    .receipt {
+        width: 100%;
+        border: 0.5px solid #ccc;
+        padding: 2px;
+        page-break-after: always;
+        break-after: page;
+        height: 100%;
+        box-sizing: border-box;
+        margin-bottom: 0;
+    }
+
+    .receipt:last-child {
+        page-break-after: auto;
+        break-after: auto;
+    }
+
+    .receipt:nth-child(1) {
+        page-break-before: always;
+        break-before: page;
+    }
+
+    /* Mobile portrait styles */
+    @media (max-width: 768px) {
+        .receipt-container {
+            display: block;
+        }
+        
+        .receipt {
+            width: 100%;
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        body {
+            width: 100%;
+            min-height: 42cm;
+        }
+    }
+
+    @media print {
+        @page {
+            size: A3 landscape;
+            margin: 0.2cm;
+        }
+        
+        .receipt {
+            page-break-after: always;
+            break-after: page;
+        }
+        
+        .receipt:last-child {
+            page-break-after: auto;
+            break-after: auto;
+        }
+        
+        @media (max-width: 768px) {
+            .receipt-container {
+                display: block;
+            }
+            .receipt {
+                width: 100%;
+                margin-bottom: 1cm;
+            }
+        }
+    }
+
+    /* Desktop/Landscape view */
+    @media screen and (min-width: 769px) {
+        body {
+            width: 42cm;
+            height: 29.7cm;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .receipt-container {
+            min-height: 28.7cm;
+        }
+        
+        .receipt {
+            height: 28.7cm;
+        }
+    }
+
+    /* Mobile portrait view */
+    @media screen and (max-width: 768px) {
+        body {
+            width: 100%;
+            min-height: 42cm;
+            margin: 0;
+            padding: 10px;
+            border: none;
+            box-shadow: none;
+        }
+        
+        .receipt-container {
+            display: block;
+            min-height: 40cm;
+        }
+        
+        .receipt {
+            width: 100%;
+            margin-bottom: 20px;
+            height: auto;
+        }
+    }
+
+    h2, h3 {
+        margin: 1px 0;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .section {
+        margin-bottom: 1px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1px;
+        font-size: 7.5px; /* Increased from 7px */
+    }
+
+    th, td {
+        border: 0.5px solid #ccc;
+        padding: 0.1px; /* Further reduced from 0.2px */
+        vertical-align: top;
+        line-height: 1;
+    }
+
+    th {
+        background: #f2f2f2;
+        padding: 0.1px; /* Further reduced from 0.2px */
+    }
+
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.1px; /* Further reduced from 0.2px */
+        font-size: 6.5px; /* Increased from 6px */
+    }
+
+    .items-table td, .items-table th {
+        padding: 0.05px; /* Further reduced from 0.1px */
+        border: 0.3px solid #ddd;
+        line-height: 1;
+    }
+
+    .summary-box {
+        margin-top: 1px;
+        padding: 1px;
+        background: #f8f8f8;
+        border: 0.5px solid #ddd;
+        font-size: 7.5px; /* Increased from 7px */
+    }
+
+    .header-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 1px;
+    }
+
+    .company-header {
+        text-align: center;
+        flex-grow: 1;
+    }
+
+    .item-name {
+        font-weight: bold;
+    }
+
+    .compact-row {
+        height: 3px; /* Further reduced from 4px */
+    }
+
+    .items-row {
+        height: 2px; /* Further reduced from 3px */
+    }
+
+    .highlight {
+        background: #f8f9fa;
+    }
+
+    .receipt {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .page-break {
+        page-break-before: always;
+        break-before: page;
+    }
+    
+    .month-name {
+        font-size: 6.5px; /* Increased from 6px */
+        color: #666;
+        font-style: italic;
+    }
+    
+    /* Increased headers */
+    .company-header h2 {
+        font-size: 10.5px; /* Increased from 10px */
+    }
+    
+    .document-info h2 {
+        font-size: 8.5px; /* Increased from 8px */
+    }
+    
+    .section h3 {
+        font-size: 8.5px; /* Increased from 8px */
+    }
+
+    /* Additional row height reductions */
+    .invoice-row {
+        height: 2.5px; /* New class for invoice rows */
+    }
+
+    .guardian-row {
+        height: 2px; /* New class for guardian rows */
+    }
+
+    .summary-row {
+        height: 2.5px; /* New class for summary rows */
+    }
+</style>
+
+<!-- METHOD: Find student by customer name -->
+{% set student_data = None %}
+{% set student_group_data = None %}
+{% set student_roll_no = None %}
+{% set customer_name = doc.party %}
+
+<!-- Try to find student by matching customer name with student name -->
+{% if customer_name %}
+    {% set students = frappe.get_all("Student", 
+        filters={
+            "student_name": ["like", "%" + customer_name + "%"]
+        },
+        fields=["name", "student_name"]
+    ) %}
+    
+    {% if students and students|length > 0 %}
+        {% set student_data = frappe.get_doc("Student", students[0].name) %}
+        
+        <!-- Find student group and roll number -->
+        {% set student_groups = frappe.get_all("Student Group Student", 
+            filters={"student": student_data.name},
+            fields=["parent", "group_roll_number"]
+        ) %}
+        
+        {% if student_groups and student_groups|length > 0 %}
+            {% set student_group_data = frappe.get_doc("Student Group", student_groups[0].parent) %}
+            {% set student_roll_no = student_groups[0].group_roll_number %}
+        {% endif %}
+    {% else %}
+        <!-- If no direct match, try partial matching -->
+        {% set all_students = frappe.get_all("Student", 
+            fields=["name", "student_name"]
+        ) %}
+        
+        {% set found_student = None %}
+        {% for student in all_students %}
+            {% if customer_name.lower() in (student.student_name or "").lower() %}
+                {% set found_student = student %}
+            {% endif %}
+        {% endfor %}
+        
+        {% if found_student %}
+            {% set student_data = frappe.get_doc("Student", found_student.name) %}
+            
+            <!-- Find student group and roll number -->
+            {% set student_groups = frappe.get_all("Student Group Student", 
+                filters={"student": student_data.name},
+                fields=["parent", "group_roll_number"]
+            ) %}
+            
+            {% if student_groups and student_groups|length > 0 %}
+                {% set student_group_data = frappe.get_doc("Student Group", student_groups[0].parent) %}
+                {% set student_roll_no = student_groups[0].group_roll_number %}
+            {% endif %}
+        {% endif %}
+    {% endif %}
+{% endif %}
+
+<!-- Function to format date and get month name -->
+{% macro format_date_with_month(date_string) %}
+    {% if date_string %}
+        {% set date_obj = frappe.utils.getdate(date_string) %}
+        {% set month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
+        {% set month_name = month_names[date_obj.month - 1] %}
+        {{ date_obj.strftime('%d-%m-%Y') }}<br>
+        <span class="month-name">{{ month_name }}</span>
+    {% else %}
+        N/A
+    {% endif %}
+{% endmacro %}
+
+<div class="receipt-container">
+    <!-- FIRST RECEIPT (FOR SCHOOL) -->
+    <div class="receipt">
+        <div class="header-info">
+            <div class="company-header">
+                <h2 style="margin: 0.5px 0; font-size: 10.5px; font-weight: bold;">{{ frappe.db.get_value("Company", doc.company, "company_name") }}</h2>
+                <div style="font-size: 6.5px;">Payment Receipt (School Copy)</div>
+            </div>
+            <div class="document-info" style="text-align: right;">
+                <h2 style="margin: 0.5px 0; font-size: 8.5px; font-weight: bold;">{{ doc.name }}</h2>
+                <div style="font-size: 6.5px;">
+                    <strong>Date:</strong> {{ doc.posting_date }} 
+                    {% if doc.reference_no %}<br><strong>Ref:</strong> {{ doc.reference_no }}{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- MERGED PAYMENT & STUDENT DETAILS -->
+        <div class="section">
+            <h3 style="margin: 1px 0; font-size: 8.5px; border-bottom: 0.5px solid #333; padding-bottom: 0.5px;">Payment & Student Details</h3>
+            <table>
+                <tr class="compact-row highlight">
+                    <td width="15%"><strong>Type:</strong> {{ doc.payment_type }}</td>
+                    <td width="15%"><strong>Mode:</strong> {{ doc.mode_of_payment }}</td>
+                    <td width="15%"><strong>Amount:</strong> {{ doc.get_formatted("paid_amount") }}</td>
+                    {% if student_data %}
+                    <td width="25%"><strong>GR No:</strong> {{ student_data.name }}</td>
+                    <td width="30%"><strong>Group:</strong> {{ student_group_data.student_group_name if student_group_data else "N/A" }}</td>
+                    {% else %}
+                    <td width="55%" colspan="2"><strong>Customer:</strong> {{ customer_name }}</td>
+                    {% endif %}
+                </tr>
+                {% if student_data %}
+                <tr class="compact-row">
+                    <td colspan="3"><strong>Student Name:</strong> {{ student_data.student_name or "N/A" }}</td>
+                    <td><strong>Roll No:</strong> {{ student_roll_no or "N/A" }}</td>
+                    <td><strong>Academic Year:</strong> {{ student_group_data.academic_year if student_group_data else "N/A" }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <!-- INVOICES TABLE -->
+        <h3 style="margin: 1px 0; font-size: 8.5px; border-bottom: 0.5px solid #333; padding-bottom: 0.5px;">Paid Invoices</h3>
+        <table>
+            <thead>
+                <tr class="compact-row" style="background: #f2f2f2;">
+                    <th width="15%">Invoice</th>
+                    <th width="15%">Due Date</th>
+                    <th width="15%">Total</th>
+                    <th width="15%">Paid</th>
+                    <th width="40%">Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ref in doc.references %}
+                    {% if ref.reference_doctype == "Sales Invoice" %}
+                        {% set inv = frappe.get_doc("Sales Invoice", ref.reference_name) %}
+                        <tr class="compact-row invoice-row" style="background: {% if loop.index % 2 == 0 %}#f8f9fa{% else %}#ffffff{% endif %};">
+                            <td><strong>{{ inv.name }}</strong></td>
+                            <td>
+                                {{ format_date_with_month(inv.due_date) }}
+                            </td>
+                            <td>{{ frappe.format_value(inv.grand_total, {'fieldtype': 'Currency'}) }}</td>
+                            <td><strong>{{ frappe.format_value(ref.allocated_amount, {'fieldtype': 'Currency'}) }}</strong></td>
+                            <td>
+                                <table class="items-table">
+                                    <tbody>
+                                        {% for item in inv.items %}
+                                        <tr class="items-row" style="background: {% if loop.index % 2 == 0 %}#f8f9fa{% else %}#ffffff{% endif %};">
+                                            <td class="item-name" width="70%">{{ item.item_name or item.item_code }}</td>
+                                            <td width="30%">{{ frappe.format_value(item.amount, {'fieldtype': 'Currency'}) }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- SUMMARY -->
+        <div class="summary-box">
+            <h3 style="margin: 1px 0; font-size: 8.5px;">Payment Summary</h3>
+            <table>
+                <tr class="compact-row summary-row">
+                    <td width="30%"><strong>Total Invoices:</strong> {{ doc.references|length }}</td>
+                    <td width="70%"><strong>Total Paid:</strong> {{ doc.get_formatted("total_allocated_amount") }}</td>
+                </tr>
+                <tr class="compact-row summary-row">
+                    <td colspan="2"><strong>In Words:</strong> {{ doc.in_words or doc.base_in_words }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- SIGNATURE -->
+        <div style="margin-top: 2px; padding-top: 1px; border-top: 1px solid #333;">
+            <div style="text-align: center; line-height: 1;">
+                <p style="margin: 0.3px 0; font-size: 7.5px;"><strong>_________________________</strong></p>
+                <p style="margin: 0.3px 0; font-size: 6.5px;"><strong>Authorized Signature</strong></p>
+                <p style="margin: 0.3px 0; font-size: 5.5px;">{{ frappe.db.get_value("Company", doc.company, "company_name") }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECOND RECEIPT (FOR PARENT) -->
+    <div class="receipt">
+        <div class="header-info">
+            <div class="company-header">
+                <h2 style="margin: 0.5px 0; font-size: 10.5px; font-weight: bold;">{{ frappe.db.get_value("Company", doc.company, "company_name") }}</h2>
+                <div style="font-size: 6.5px;">Payment Receipt (Parent Copy)</div>
+            </div>
+            <div class="document-info" style="text-align: right;">
+                <h2 style="margin: 0.5px 0; font-size: 8.5px; font-weight: bold;">{{ doc.name }}</h2>
+                <div style="font-size: 6.5px;">
+                    <strong>Date:</strong> {{ doc.posting_date }} 
+                    {% if doc.reference_no %}<br><strong>Ref:</strong> {{ doc.reference_no }}{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- MERGED PAYMENT & STUDENT DETAILS -->
+        <div class="section">
+            <h3 style="margin: 1px 0; font-size: 8.5px; border-bottom: 0.5px solid #333; padding-bottom: 0.5px;">Payment & Student Details</h3>
+            <table>
+                <tr class="compact-row highlight">
+                    <td width="15%"><strong>Type:</strong> {{ doc.payment_type }}</td>
+                    <td width="15%"><strong>Mode:</strong> {{ doc.mode_of_payment }}</td>
+                    <td width="15%"><strong>Amount:</strong> {{ doc.get_formatted("paid_amount") }}</td>
+                    {% if student_data %}
+                    <td width="25%"><strong>GR No:</strong> {{ student_data.name }}</td>
+                    <td width="30%"><strong>Group:</strong> {{ student_group_data.student_group_name if student_group_data else "N/A" }}</td>
+                    {% else %}
+                    <td width="55%" colspan="2"><strong>Customer:</strong> {{ customer_name }}</td>
+                    {% endif %}
+                </tr>
+                {% if student_data %}
+                <tr class="compact-row">
+                    <td colspan="3"><strong>Student Name:</strong> {{ student_data.student_name or "N/A" }}</td>
+                    <td><strong>Roll No:</strong> {{ student_roll_no or "N/A" }}</td>
+                    <td><strong>Academic Year:</strong> {{ student_group_data.academic_year if student_group_data else "N/A" }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <!-- INVOICES TABLE -->
+        <h3 style="margin: 1px 0; font-size: 8.5px; border-bottom: 0.5px solid #333; padding-bottom: 0.5px;">Paid Invoices</h3>
+        <table>
+            <thead>
+                <tr class="compact-row" style="background: #f2f2f2;">
+                    <th width="15%">Invoice</th>
+                    <th width="15%">Due Date</th>
+                    <th width="15%">Total</th>
+                    <th width="15%">Paid</th>
+                    <th width="40%">Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ref in doc.references %}
+                    {% if ref.reference_doctype == "Sales Invoice" %}
+                        {% set inv = frappe.get_doc("Sales Invoice", ref.reference_name) %}
+                        <tr class="compact-row invoice-row" style="background: {% if loop.index % 2 == 0 %}#f8f9fa{% else %}#ffffff{% endif %};">
+                            <td><strong>{{ inv.name }}</strong></td>
+                            <td>
+                                {{ format_date_with_month(inv.due_date) }}
+                            </td>
+                            <td>{{ frappe.format_value(inv.grand_total, {'fieldtype': 'Currency'}) }}</td>
+                            <td><strong>{{ frappe.format_value(ref.allocated_amount, {'fieldtype': 'Currency'}) }}</strong></td>
+                            <td>
+                                <table class="items-table">
+                                    <tbody>
+                                        {% for item in inv.items %}
+                                        <tr class="items-row" style="background: {% if loop.index % 2 == 0 %}#f8f9fa{% else %}#ffffff{% endif %};">
+                                            <td class="item-name" width="70%">{{ item.item_name or item.item_code }}</td>
+                                            <td width="30%">{{ frappe.format_value(item.amount, {'fieldtype': 'Currency'}) }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- SUMMARY -->
+        <div class="summary-box">
+            <h3 style="margin: 1px 0; font-size: 8.5px;">Payment Summary</h3>
+            <table>
+                <tr class="compact-row summary-row">
+                    <td width="30%"><strong>Total Invoices:</strong> {{ doc.references|length }}</td>
+                    <td width="70%"><strong>Total Paid:</strong> {{ doc.get_formatted("total_allocated_amount") }}</td>
+                </tr>
+                <tr class="compact-row summary-row">
+                    <td colspan="2"><strong>In Words:</strong> {{ doc.in_words or doc.base_in_words }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- SIGNATURE -->
+        <div style="margin-top: 2px; padding-top: 1px; border-top: 1px solid #333;">
+            <div style="text-align: center; line-height: 1;">
+                <p style="margin: 0.3px 0; font-size: 7.5px;"><strong>_________________________</strong></p>
+                <p style="margin: 0.3px 0; font-size: 6.5px;"><strong>Authorized Signature</strong></p>
+                <p style="margin: 0.3px 0; font-size: 5.5px;">{{ frappe.db.get_value("Company", doc.company, "company_name") }}</p>
+            </div>
+        </div>
+    </div>
+</div>

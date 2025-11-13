@@ -354,7 +354,8 @@ def get_student_details(student):
         "name": getattr(student_doc, "name", None),
         "email_address": getattr(student_doc, "student_email_id", None),
         "phone_number": getattr(student_doc, "student_mobile_number", None),
-        "roll_number": getattr(student_doc, "roll_number", None)
+        "roll_number": getattr(student_doc, "roll_number", None),
+        "address": getattr(student_doc, "address_line_1", None),
     }
 
     # 2️⃣ Fetch all linked Guardians
@@ -2398,11 +2399,193 @@ def remove_courses_from_students(students, student_group=None, program_id=None):
             "errors": [error_msg]
         }
 
+
+@frappe.whitelist()
+def delete_students(student_ids):
+    """
+    Delete students and only the specified related data:
+    - Student Group links
+    - Program Enrollment and child tables
+    - User and related data
+    - Student Leave Application
+    - Student Attendance
+    """
+    import json
+    
+    if isinstance(student_ids, str):
+        student_ids = json.loads(student_ids)
+    
+    if not student_ids:
+        return {"success": False, "message": "No student IDs provided"}
+    
+    deleted_count = 0
+    errors = []
+    
+    for student_id in student_ids:
+        try:
+            if frappe.db.exists("Student", student_id):
+                # Get student details before deletion for logging
+                student = frappe.get_doc("Student", student_id)
+                student_name = student.student_name
+                user_id = student.user  # Get linked user ID if exists
+                
+                # 1. Delete Student Group links
+                delete_student_group_links(student_id)
+                
+                # 2. Delete Program Enrollment and child tables
+                delete_program_enrollments(student_id)
+                
+                # 3. Delete Student Leave Applications
+                delete_student_leave_applications(student_id)
+                
+                # 4. Delete Student Attendance records
+                delete_student_attendance(student_id)
+                
+                # 5. Delete User and related data (if exists)
+                if user_id and frappe.db.exists("User", user_id):
+                    delete_user_data(user_id)
+                
+                # 6. Finally delete the Student document
+                frappe.delete_doc("Student", student_id, ignore_permissions=True, force=True)
+                
+                frappe.db.commit()
+                deleted_count += 1
+                
+                frappe.logger().info(f"Successfully deleted student: {student_id} - {student_name}")
+                
+            else:
+                errors.append(f"Student {student_id} not found")
+                
+        except Exception as e:
+            frappe.db.rollback()
+            error_msg = f"Error deleting student {student_id}: {str(e)}"
+            errors.append(error_msg)
+            frappe.log_error(f"Student Deletion Error: {error_msg}")
+    
+    result = {
+        "success": deleted_count > 0,
+        "deleted_count": deleted_count,
+        "total_requested": len(student_ids),
+        "errors": errors
+    }
+    
+    if errors:
+        result["message"] = f"Deleted {deleted_count} students with {len(errors)} errors"
+    else:
+        result["message"] = f"Successfully deleted {deleted_count} students"
+    
+    return result
+
+def delete_student_group_links(student_id):
+    """Delete student from all student groups"""
+    # Delete from Student Group Student child table
+    frappe.db.sql("""
+        DELETE FROM `tabStudent Group Student` 
+        WHERE student = %s
+    """, student_id)
+
+def delete_program_enrollments(student_id):
+    """Delete all program enrollments and their child tables"""
+    enrollments = frappe.get_all("Program Enrollment", 
+                                filters={"student": student_id},
+                                pluck="name")
+    
+    for enrollment in enrollments:
+        try:
+            # Delete the program enrollment (Frappe will automatically handle child tables)
+            frappe.delete_doc("Program Enrollment", enrollment, ignore_permissions=True, force=True)
+        except Exception as e:
+            frappe.log_error(f"Error deleting program enrollment {enrollment}: {str(e)}")
+
+def delete_student_leave_applications(student_id):
+    """Delete all student leave applications"""
+    leave_applications = frappe.get_all("Student Leave Application", 
+                                       filters={"student": student_id},
+                                       pluck="name")
+    
+    for leave_app in leave_applications:
+        try:
+            frappe.delete_doc("Student Leave Application", leave_app, ignore_permissions=True, force=True)
+        except Exception as e:
+            frappe.log_error(f"Error deleting student leave application {leave_app}: {str(e)}")
+
+def delete_student_attendance(student_id):
+    """Delete all student attendance records"""
+    # Delete from Student Attendance doctype
+    frappe.db.sql("""
+        DELETE FROM `tabStudent Attendance` 
+        WHERE student = %s
+    """, student_id)
+
+def delete_user_data(user_id):
+    """Delete user and all user-related data"""
+    try:
+        # Get user email before deletion
+        user_email = frappe.db.get_value("User", user_id, "email")
+        
+        # Delete user roles
+        frappe.db.sql("""
+            DELETE FROM `tabHas Role` 
+            WHERE parent = %s
+        """, user_id)
+        
+        # Delete user permissions
+        frappe.db.sql("""
+            DELETE FROM `tabUser Permission` 
+            WHERE user = %s
+        """, user_id)
+        
+        # Finally delete the user
+        frappe.delete_doc("User", user_id, ignore_permissions=True, force=True)
+        
+        frappe.logger().info(f"Deleted user: {user_id} ({user_email})")
+        
+    except Exception as e:
+        frappe.log_error(f"Error deleting user {user_id}: {str(e)}")
+
+# Single student deletion function for backward compatibility
+@frappe.whitelist()
+def delete_student(student_id):
+    """Delete single student (wrapper for delete_students)"""
+    return delete_students([student_id])
+
+
 # ---------------------- BASIC STUDENT DATA ---------------------- #
 import frappe
 from datetime import date
 from frappe.utils import getdate
 from frappe.query_builder import DocType
+
+
+@frappe.whitelist()
+def get_basic_student_list(student_group):
+    """Return minimal info — ID, name, roll no, and image URL."""
+
+    from frappe.query_builder import DocType
+
+    StudentGroupStudent = DocType("Student Group Student")
+    Student = DocType("Student")
+
+    student_list = (
+        frappe.qb.from_(StudentGroupStudent)
+        .join(Student)
+        .on(StudentGroupStudent.student == Student.name)
+        .select(
+            StudentGroupStudent.student,
+            StudentGroupStudent.student_name,
+            StudentGroupStudent.group_roll_number,
+            Student.image.as_("student_image"),
+            Student.address_line_1.as_("address"),
+            Student.student_mobile_number.as_("mobile"),
+        )
+        .where(
+            (StudentGroupStudent.parent == student_group)
+            & (StudentGroupStudent.active == 1)
+        )
+        .orderby(StudentGroupStudent.group_roll_number)
+    ).run(as_dict=True)
+
+    return student_list
 
 @frappe.whitelist()
 def get_basic_student_data(student_group):

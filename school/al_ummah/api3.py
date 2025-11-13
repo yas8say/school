@@ -13,27 +13,47 @@ from frappe.utils.response import build_response
 from frappe.auth import get_logged_user
 
 #qdsr itqf nmqx zmni
+import frappe
 
 @frappe.whitelist()
 def fetch_grading_scales():
-    """
-    Fetch list of all Grading Scale names.
-    """
-
     try:
+        # Get all grading scales
         scales = frappe.get_all(
             "Grading Scale",
-            fields=["name"],
+            fields=["name", "grading_scale_name", "modified"],
             order_by="name asc"
         )
 
-        # Extract just names → ["CBSE Scale", "IGCSE Scale", ...]
-        scale_names = [s["name"] for s in scales]
+        scale_data = []
+        for scale in scales:
+            # Get intervals (child table rows)
+            intervals = frappe.get_all(
+                "Grading Scale Interval",
+                filters={"parent": scale["name"]},
+                fields=["grade_code", "threshold", "grade_description"],
+                order_by="threshold desc"
+            )
 
+            grades = []
+            for row in intervals:
+                grades.append({
+                    "grade_code": row["grade_code"],
+                    "threshold": float(row["threshold"]),
+                    "description": row.get("grade_description", "")
+                })
+
+            scale_data.append({
+                "name": scale["name"],
+                "grading_scale_name": scale.get("grading_scale_name") or scale["name"],
+                "modified": scale.get("modified"),
+                "grades": grades,
+                "grade_count": len(grades)
+            })
+        print(scale_data)
         return {
             "success": True,
-            "grading_scales": scale_names,
-            "count": len(scale_names)
+            "grading_scales": scale_data
         }
 
     except Exception as e:
@@ -863,7 +883,7 @@ def resolve_grading_scale(grading_system):
             scale_doc.append("intervals", {
                 "grade_code": row["grade_code"],
                 "threshold": float(row["threshold"]),
-                "description": row.get("description", "")
+                "description": row.get("grade_description", "")
             })
 
         # Save it

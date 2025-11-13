@@ -100,10 +100,10 @@
       </div>
 
       <!-- Navigation Section -->
-      <div class="space-y-6 flex-1 overflow-y-auto">
+      <div class="space-y-6 flex-1 overflow-y-auto pb-6">
         <div class="space-y-3">
           <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Navigation</h3>
-          <nav class="space-y-2">
+          <nav class="space-y-2 mx-2">
             <router-link 
               v-for="nav in navigation"
               :key="nav.to"
@@ -197,6 +197,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { session } from '../data/session'
 
+const StudentsIcon = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+  </svg>`
+}
 const FeeScheduleIcon = {
   template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -239,6 +245,13 @@ const showSidebar = ref(false)
 // Navigation configuration
 const navigation = [
   {
+    to: '/home/students',
+    label: 'Students',
+    icon: StudentsIcon,
+    activeClasses: 'bg-blue-500 text-white shadow-lg shadow-blue-200',
+    inactiveClasses: 'bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 hover:shadow-md'
+  },
+  {
     to: '/home/fee-payments',
     label: 'Fee Payments',
     icon: FeePaymentIcon,
@@ -258,20 +271,6 @@ const navigation = [
     icon: QuickSetupIcon,
     activeClasses: 'bg-blue-500 text-white shadow-lg shadow-blue-200',
     inactiveClasses: 'bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 hover:shadow-md'
-  },
-  {
-    to: '/home/upload-students',
-    label: 'Upload Students',
-    icon: UploadIcon,
-    activeClasses: 'bg-blue-500 text-white shadow-lg shadow-blue-200',
-    inactiveClasses: 'bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 hover:shadow-md'
-  },
-  {
-    to: '/home/add-student',
-    label: 'Add Student',
-    icon: AddUserIcon,
-    activeClasses: 'bg-green-500 text-white shadow-lg shadow-green-200',
-    inactiveClasses: 'bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 hover:shadow-md'
   },
   {
     to: '/home/upload-instructors',
@@ -298,11 +297,10 @@ const navigation = [
 
 // Mobile navigation (simplified for bottom bar)
 const mobileNavigation = [
+  { to: '/home/students', label: 'Students', icon: StudentsIcon },
   { to: '/home/fee-schedule', label: 'Fee Schedule', icon: FeeScheduleIcon },
   { to: '/home/fee-payments', label: 'Payments', icon: FeePaymentIcon },
   { to: '/home/quick-setup', label: 'Setup', icon: QuickSetupIcon },
-  { to: '/home/upload-students', label: 'Upload', icon: UploadIcon },
-  { to: '/home/add-student', label: 'Add', icon: AddUserIcon },
   { to: '/home/admin-settings', label: 'Settings', icon: SettingsIcon }
 ]
 
@@ -317,6 +315,7 @@ const adminImage = computed(() => {
 // Current page title for display
 const currentPageTitle = computed(() => {
   const path = route.path
+  if (path.includes('students')) return 'Students'
   if (path.includes('fee-schedule')) return 'Fee Schedule'
   if (path.includes('fee-payments')) return 'Fee Payments'
   if (path.includes('quick-setup')) return 'Quick Setup'
@@ -374,6 +373,7 @@ onUnmounted(() => {
 <style scoped>
 /* Smooth scrolling for sidebar */
 aside {
+  margin-bottom: 2rem;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 transparent;
 }

@@ -121,7 +121,7 @@ export default {
         errorMessage.value = '';
       } catch (err) {
         console.error('Error starting scanner:', err);
-        errorMessage.value = 'Failed to start camera: ' + err.message;
+        // errorMessage.value = 'Failed to start camera: ' + err.message;
         emit('error', err.message);
         loading.value = false;
       }

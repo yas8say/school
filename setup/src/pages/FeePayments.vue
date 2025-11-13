@@ -1,5 +1,5 @@
 <template>
-  <div class="qr-payment-container">
+  <div class="enrollment-container">
     <div class="header">
       <h1 class="title">Student Payment</h1>
       <p class="subtitle">Scan QR code or search student to pay invoices</p>
@@ -13,285 +13,381 @@
       </div>
     </div>
 
-    <!-- Student Search Section -->
-    <div class="form-card" v-if="!scannedStudentId">
-      <h2 class="form-title">Find Student</h2>
-      
-      <div class="search-section">
-        <!-- QR Scanner -->
-        <div class="qr-section">
-          <QRScanner 
-            @qr-scanned="onQRCodeScanned"
-            @error="onScannerError"
-            ref="qrScannerRef"
-          />
-        </div>
+    <div class="scroll-view-content">
+      <!-- Student Search Section -->
+      <div class="form-card" v-if="!scannedStudentId">
+        <h2 class="form-title">Find Student</h2>
+        
+        <div class="search-section">
+          <!-- QR Scanner -->
+          <div class="qr-section">
+            <QRScanner 
+              @qr-scanned="onQRCodeScanned"
+              @error="onScannerError"
+              ref="qrScannerRef"
+            />
+          </div>
 
-        <!-- Divider -->
-        <div class="divider">
-          <span>OR</span>
-        </div>
+          <!-- Divider -->
+          <div class="divider">
+            <span>OR</span>
+          </div>
 
-        <!-- Manual Search -->
-        <div class="search-input-section">
-          <div class="search-input-group">
-            <div class="input-with-icon">
-              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                v-model="searchQuery"
-                type="text"
-                class="search-input"
-                placeholder="Enter Student ID or GR Number"
-                @keyup.enter="searchStudent"
+          <!-- Manual Search -->
+          <div class="search-input-section">
+            <div class="search-input-group">
+              <div class="input-with-icon">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  ref="searchInputRef"
+                  v-model="searchQuery"
+                  type="text"
+                  class="input"
+                  placeholder="Enter Student ID or GR Number"
+                  @keyup.enter="searchStudent"
+                >
+              </div>
+              <button 
+                @click="searchStudent" 
+                class="primary-button"
+                :disabled="!searchQuery"
               >
+                Search
+              </button>
             </div>
-            <button 
-              @click="searchStudent" 
-              class="search-button"
-              :disabled="!searchQuery"
-            >
-              Search
-            </button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Student Info & Invoices -->
-    <div v-if="scannedStudentId" class="form-card">
-      <div class="student-header">
-        <div class="student-info">
-          <h2 class="student-name">{{ studentInfo.student_name || scannedStudentId }}</h2>
-          <div class="student-meta">
-            <span class="student-id">ID: {{ scannedStudentId }}</span>
-            <span v-if="studentInfo.name" class="gr-number">GR: {{ studentInfo.name }}</span>
-          </div>
-        </div>
-        <button @click="resetScanner" class="icon-button">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-          Scan Another
-        </button>
-      </div>
-
-      <!-- Error Message -->
-      <div v-if="errorMessage" class="message error">
-        {{ errorMessage }}
-      </div>
-
-      <!-- No Invoices -->
-      <div v-if="invoicesResource.data && invoicesResource.data.count === 0" class="empty-state">
-        <div class="empty-icon">✅</div>
-        <h3>No Unpaid Invoices</h3>
-        <p>All invoices are paid for this student</p>
-      </div>
-
-      <!-- Invoices List -->
-      <div v-if="invoicesResource.data && invoicesResource.data.count > 0" class="invoices-section">
-        <div class="section-header">
-          <h3>Unpaid Invoices ({{ invoicesResource.data.count }})</h3>
-          <div class="selection-controls">
-            <button @click="selectAllInvoices" class="text-button">
-              Select All
-            </button>
-            <button @click="deselectAllInvoices" class="text-button">
-              Clear
-            </button>
-          </div>
-        </div>
-
-        <div class="invoices-grid">
-          <div 
-            v-for="invoice in invoicesResource.data.invoices" 
-            :key="invoice.name"
-            :class="['invoice-card', { selected: selectedInvoices.includes(invoice.name) }]"
-            @click="toggleInvoiceSelection(invoice.name)"
-          >
-            <div class="invoice-checkbox">
-              <input
-                type="checkbox"
-                :checked="selectedInvoices.includes(invoice.name)"
-                @change="toggleInvoiceSelection(invoice.name)"
-                @click.stop
-              >
+      <!-- Enhanced Student Info & Invoices -->
+      <div v-if="scannedStudentId" class="form-card">
+        <!-- Student Profile Header -->
+        <div class="student-profile-header">
+          <StudentAvatar 
+            :imageUrl="studentInfo.image"
+            :studentName="studentInfo.student_name"
+            class="student-avatar-large"
+          />
+          <div class="student-main-info">
+            <h2 class="student-name">{{ studentInfo.student_name || scannedStudentId }}</h2>
+            <div class="student-meta">
+              <span class="student-id">ID: {{ scannedStudentId }}</span>
+              <span v-if="studentInfo.name" class="student-name-id">System ID: {{ studentInfo.name }}</span>
             </div>
             
-            <div class="invoice-content">
-              <div class="invoice-header">
-                <div class="invoice-info">
-                  <h4 class="invoice-title">{{ invoice.name }}</h4>
-                  <p class="invoice-customer">{{ invoice.customer_name }}</p>
-                </div>
-                <div class="invoice-amount">₹{{ invoice.grand_total }}</div>
+            <!-- Contact Info -->
+            <div v-if="studentInfo.student_email_id || studentInfo.student_mobile_number" class="contact-info">
+              <div v-if="studentInfo.student_email_id" class="contact-item">
+                <span class="contact-label">Email:</span>
+                <span class="contact-value">{{ studentInfo.student_email_id }}</span>
+              </div>
+              <div v-if="studentInfo.student_mobile_number" class="contact-item">
+                <span class="contact-label">Mobile:</span>
+                <span class="contact-value">{{ studentInfo.student_mobile_number }}</span>
+              </div>
+            </div>
+          </div>
+          <button @click="resetScanner" class="secondary-button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+            Scan Another
+          </button>
+        </div>
+
+        <!-- Guardian Information -->
+        <div v-if="studentInfo.guardians && studentInfo.guardians.length > 0" class="guardians-section">
+          <h3 class="section-title">Guardian Information</h3>
+          <div class="guardians-grid">
+            <div 
+              v-for="guardian in studentInfo.guardians" 
+              :key="guardian.name"
+              class="guardian-card"
+            >
+              <div class="guardian-name">{{ guardian.guardian_name }}</div>
+              <div class="guardian-relation">{{ guardian.relation }}</div>
+              <div v-if="guardian.mobile_number" class="guardian-contact">
+                <span class="contact-icon">📱</span>
+                {{ guardian.mobile_number }}
+              </div>
+              <div v-if="guardian.email_address" class="guardian-contact">
+                <span class="contact-icon">✉️</span>
+                {{ guardian.email_address }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Groups -->
+        <div v-if="studentInfo.student_groups && studentInfo.student_groups.length > 0" class="student-groups-section">
+          <h3 class="section-title">Student Groups</h3>
+          <div class="groups-list">
+            <span 
+              v-for="group in studentInfo.student_groups" 
+              :key="group.student_group"
+              class="group-tag"
+            >
+              {{ group.student_group }}
+              <span v-if="group.group_roll_number" class="group-roll">(Roll: {{ group.group_roll_number }})</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- No Invoices -->
+        <div v-if="invoicesResource && invoicesResource.data && invoicesResource.data.count === 0" class="empty-state">
+          <div class="success-icon">✅</div>
+          <h3>No Unpaid Invoices</h3>
+          <p>All invoices are paid for this student</p>
+        </div>
+
+        <!-- Invoices List -->
+        <div v-if="invoicesResource && invoicesResource.data && unpaidInvoicesCount > 0" class="invoices-section">
+          <div class="section-header">
+            <h3 class="section-title">Unpaid Invoices ({{ unpaidInvoicesCount }})</h3>
+            <div class="selection-controls">
+              <button @click="selectAllUnpaidInvoices" class="text-button">
+                Select All
+              </button>
+              <button @click="deselectAllInvoices" class="text-button">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div class="invoices-grid">
+            <div 
+              v-for="invoice in unpaidInvoices" 
+              :key="invoice.name"
+              :class="['invoice-card', { selected: selectedInvoices.includes(invoice.name) }]"
+              @click="toggleInvoiceSelection(invoice.name)"
+            >
+              <div class="invoice-checkbox">
+                <input
+                  type="checkbox"
+                  :checked="selectedInvoices.includes(invoice.name)"
+                  @change="toggleInvoiceSelection(invoice.name)"
+                  @click.stop
+                >
               </div>
               
-              <div class="invoice-details">
-                <div class="detail-row">
-                  <span class="detail-label">Due:</span>
-                  <span class="due-date">{{ getMonthName(invoice.due_date) }}</span>
+              <div class="invoice-content">
+                <div class="invoice-header">
+                  <div class="invoice-info">
+                    <h4 class="invoice-title">{{ invoice.name }}</h4>
+                    <p class="invoice-customer">{{ invoice.customer_name }}</p>
+                    <p class="invoice-date">{{ formatDate(invoice.posting_date) }}</p>
+                  </div>
+                  <div class="invoice-amounts">
+                    <div class="invoice-total">₹{{ invoice.grand_total }}</div>
+                    <div class="outstanding-amount">Due: ₹{{ invoice.outstanding_amount }}</div>
+                  </div>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">Outstanding:</span>
-                  <span class="outstanding-amount">₹{{ invoice.outstanding_amount }}</span>
+                
+              <!-- Invoice Items -->
+              <div v-if="invoice.items && invoice.items.length > 0" class="invoice-items">
+                <div class="items-header">
+                  <span>Items</span>
+                  <span class="items-count">{{ invoice.items.length }} item(s)</span>
+                </div>
+                <div class="items-list">
+                  <div 
+                    v-for="item in invoice.items" 
+                    :key="item.name || item.item_code" 
+                    class="item-row"
+                  >
+                    <div class="item-info">
+                      <div class="item-name">{{ item.item_name || item.item_code }}</div>
+                      <div v-if="item.description" class="item-description">{{ item.description }}</div>
+                      <div class="item-details">
+                        <span v-if="item.qty" class="item-qty">Qty: {{ item.qty }}</span>
+                        <span v-if="item.rate" class="item-rate">Rate: ₹{{ item.rate }}</span>
+                      </div>
+                    </div>
+                    <div class="item-pricing">
+                      <div class="item-amount">₹{{ item.amount || 0 }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+                <div class="invoice-details">
+                  <div class="detail-row">
+                    <span class="detail-label">Due Date:</span>
+                    <span class="due-date">{{ formatDate(invoice.due_date) }}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">Status:</span>
+                    <span :class="['status-badge', invoice.status.toLowerCase()]">
+                      {{ invoice.status }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Payment Section -->
-    <div v-if="selectedInvoices.length > 0" class="form-card payment-section">
-      <h2 class="form-title">Payment</h2>
-      
-      <div class="payment-summary">
-        <div class="summary-item">
-          <span>Selected Invoices:</span>
-          <strong>{{ selectedInvoices.length }}</strong>
-        </div>
-        <div class="summary-item total">
-          <span>Total Amount:</span>
-          <strong>₹{{ totalSelectedAmount }}</strong>
-        </div>
-      </div>
-
-      <!-- Account Selection -->
-      <div class="form-group">
-        <label>Account Paid To</label>
-        <select 
-          v-model="paymentData.paid_to_account" 
-          class="select-input"
-          :disabled="accountsResource.loading"
-        >
-          <option value="">Select Account</option>
-          <option 
-            v-for="account in accountsList" 
-            :key="account.name" 
-            :value="account.name"
-          >
-            {{ account.account_name }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Payment Method -->
-      <div class="payment-methods">
-        <div class="payment-method-option">
-          <input
-            type="radio"
-            id="cash"
-            v-model="selectedPaymentMethod"
-            value="cash"
-            class="payment-radio"
-          >
-          <label for="cash" class="payment-label">
-            <div class="payment-icon">💵</div>
-            <span>Cash</span>
-          </label>
-        </div>
+      <!-- Payment Section -->
+      <div v-if="selectedInvoices.length > 0" class="form-card payment-section">
+        <h2 class="form-title">Payment</h2>
         
-        <div class="payment-method-option">
-          <input
-            type="radio"
-            id="cheque"
-            v-model="selectedPaymentMethod"
-            value="cheque"
-            class="payment-radio"
-          >
-          <label for="cheque" class="payment-label">
-            <div class="payment-icon">🏦</div>
-            <span>Cheque</span>
-          </label>
+        <div class="payment-summary">
+          <div class="summary-item">
+            <span>Selected Invoices:</span>
+            <strong>{{ selectedInvoices.length }}</strong>
+          </div>
+          <div class="summary-item total">
+            <span>Total Amount:</span>
+            <strong>₹{{ totalSelectedAmount }}</strong>
+          </div>
         </div>
-        
-        <div class="payment-method-option" v-if="razorpaySettingsConfigured">
-          <input
-            type="radio"
-            id="razorpay"
-            v-model="selectedPaymentMethod"
-            value="razorpay"
-            class="payment-radio"
-          >
-          <label for="razorpay" class="payment-label">
-            <div class="payment-icon">💳</div>
-            <span>Online</span>
-          </label>
-        </div>
-      </div>
 
-      <!-- Cheque Fields -->
-      <div v-if="selectedPaymentMethod === 'cheque'" class="cheque-fields">
+        <!-- Account Selection -->
         <div class="form-group">
-          <label>Cheque Number</label>
-          <input
-            v-model="paymentData.cheque_no"
-            type="text"
-            class="input"
-            placeholder="Enter cheque number"
+          <label>Account Paid To</label>
+          <select 
+            v-model="paymentData.paid_to_account" 
+            class="picker"
+            :disabled="accountsResource && accountsResource.loading"
           >
+            <option value="">Select Account</option>
+            <option 
+              v-for="account in accountsList" 
+              :key="account.name" 
+              :value="account.name"
+            >
+              {{ account.account_name }}
+            </option>
+          </select>
         </div>
-        <div class="form-group">
-          <label>Cheque Date</label>
-          <input
-            v-model="paymentData.cheque_date"
-            type="date"
-            class="input"
-            :max="getTodayDate()"
+
+        <!-- Payment Method -->
+        <div class="form-section">
+          <h3 class="section-title">Payment Method</h3>
+          <div class="payment-methods">
+            <div class="payment-method-option">
+              <input
+                type="radio"
+                id="cash"
+                v-model="selectedPaymentMethod"
+                value="cash"
+                class="payment-radio"
+              >
+              <label for="cash" class="payment-label">
+                <div class="payment-icon">💵</div>
+                <span>Cash</span>
+              </label>
+            </div>
+            
+            <div class="payment-method-option">
+              <input
+                type="radio"
+                id="cheque"
+                v-model="selectedPaymentMethod"
+                value="cheque"
+                class="payment-radio"
+              >
+              <label for="cheque" class="payment-label">
+                <div class="payment-icon">🏦</div>
+                <span>Cheque</span>
+              </label>
+            </div>
+            
+            <div class="payment-method-option" v-if="razorpaySettingsConfigured">
+              <input
+                type="radio"
+                id="razorpay"
+                v-model="selectedPaymentMethod"
+                value="razorpay"
+                class="payment-radio"
+              >
+              <label for="razorpay" class="payment-label">
+                <div class="payment-icon">💳</div>
+                <span>Online</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cheque Fields -->
+        <div v-if="selectedPaymentMethod === 'cheque'" class="cheque-fields">
+          <div class="form-group">
+            <label>Cheque Number</label>
+            <input
+              v-model="paymentData.cheque_no"
+              type="text"
+              class="input"
+              placeholder="Enter cheque number"
+            >
+          </div>
+          <div class="form-group">
+            <label>Cheque Date</label>
+            <input
+              v-model="paymentData.cheque_date"
+              type="date"
+              class="input"
+              :max="getTodayDate()"
+            >
+          </div>
+        </div>
+
+        <!-- Payment Action -->
+        <div class="form-actions">
+          <button 
+            v-if="selectedPaymentMethod === 'razorpay'"
+            @click="initiateRazorpayPayment" 
+            class="success-button"
+            :disabled="processingPayment || !paymentData.paid_to_account"
           >
+            <span v-if="processingPayment" class="button-content">
+              <span class="spinner"></span> Processing...
+            </span>
+            <span v-else class="button-content">
+              Pay ₹{{ totalSelectedAmount }} Online
+            </span>
+          </button>
+
+          <button 
+            v-else
+            @click="processManualPayment" 
+            class="success-button"
+            :disabled="!isManualPaymentValid || processingPayment"
+          >
+            <span v-if="processingPayment" class="button-content">
+              <span class="spinner"></span> Processing...
+            </span>
+            <span v-else class="button-content">
+              Confirm Payment
+            </span>
+          </button>
         </div>
-      </div>
-
-      <!-- Payment Action -->
-      <div class="payment-action">
-        <button 
-          v-if="selectedPaymentMethod === 'razorpay'"
-          @click="initiateRazorpayPayment" 
-          class="pay-button online"
-          :disabled="processingPayment || !paymentData.paid_to_account"
-        >
-          <span v-if="processingPayment" class="button-content">
-            <span class="spinner"></span> Processing...
-          </span>
-          <span v-else class="button-content">
-            Pay ₹{{ totalSelectedAmount }} Online
-          </span>
-        </button>
-
-        <button 
-          v-else
-          @click="processManualPayment" 
-          class="pay-button"
-          :disabled="!isManualPaymentValid || processingPayment"
-        >
-          <span v-if="processingPayment" class="button-content">
-            <span class="spinner"></span> Processing...
-          </span>
-          <span v-else class="button-content">
-            Confirm Payment
-          </span>
-        </button>
       </div>
     </div>
+    <Toast ref="toastRef" />
   </div>
 </template>
 
 <script>
 import { createResource } from 'frappe-ui';
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import QRScanner from '@/components/QRScanner.vue';
+import StudentAvatar from '@/components/StudentAvatar.vue';
+import '@/styles/form.css';
+import Toast from '@/components/Toast.vue';
 
 export default {
   name: 'QRPaymentPage',
   components: {
-    QRScanner
+    QRScanner,
+    StudentAvatar,
+    Toast
   },
   
   setup() {
-    // Reactive state
+    // Initialize all reactive variables first
     const scannedStudentId = ref('');
     const searchQuery = ref('');
     const selectedInvoices = ref([]);
@@ -299,12 +395,16 @@ export default {
     const loading = ref(false);
     const processingPayment = ref(false);
     const qrScannerRef = ref(null);
+    const searchInputRef = ref(null);
     const selectedPaymentMethod = ref('cash');
     const razorpayLoaded = ref(false);
     const razorpayInstance = ref(null);
     const razorpaySettingsConfigured = ref(false);
     const studentInfo = ref({});
-    
+    const toastRef = ref(null);
+    const lastErrorShown = ref('');
+
+
     // Payment form data
     const paymentData = ref({
       paid_to_account: '',
@@ -313,19 +413,77 @@ export default {
       cheque_date: ''
     });
 
-    // API Resources
+    // Define computed properties first
+    const unpaidInvoices = computed(() => {
+      if (!invoicesResource?.data?.invoices) return [];
+      return invoicesResource.data.invoices.filter(invoice => 
+        invoice.outstanding_amount > 0 && invoice.status.toLowerCase() !== 'paid'
+      );
+    });
+
+    const unpaidInvoicesCount = computed(() => {
+      return unpaidInvoices.value.length;
+    });
+
+    const totalSelectedAmount = computed(() => {
+      if (!invoicesResource?.data?.invoices) return 0;
+      
+      return invoicesResource.data.invoices
+        .filter(invoice => selectedInvoices.value.includes(invoice.name))
+        .reduce((total, invoice) => total + parseFloat(invoice.grand_total), 0)
+        .toFixed(2);
+    });
+
+    const isManualPaymentValid = computed(() => {
+      const basicValidation = paymentData.value.paid_to_account;
+
+      if (selectedPaymentMethod.value === 'cheque') {
+        return basicValidation && 
+               paymentData.value.cheque_no && 
+               paymentData.value.cheque_date;
+      }
+
+      return basicValidation;
+    });
+
+    const accountsList = computed(() => {
+      if (accountsResource?.data?.accounts) {
+        return accountsResource.data.accounts;
+      }
+      return [];
+    });
+
+    const getStudentMobileNumber = computed(() => {
+      if (studentInfo.value.student_mobile_number) {
+        return studentInfo.value.student_mobile_number;
+      }
+      if (studentInfo.value.guardians && studentInfo.value.guardians.length > 0) {
+        const guardianWithMobile = studentInfo.value.guardians.find(g => g.mobile_number);
+        return guardianWithMobile ? guardianWithMobile.mobile_number : null;
+      }
+      return null;
+    });
+
+    // Define API resources after computed properties
     const invoicesResource = createResource({
       url: 'school.al_ummah.api4.get_sales_invoices_by_student',
       params: { student_id: scannedStudentId },
       onSuccess: (data) => {
         loading.value = false;
-        studentInfo.value = data.student_info || {};
-        console.log('Invoices loaded:', data);
+        studentInfo.value = data.student_data || {};
+        
+        // Check for paid invoices and show toast messages
+        if (data.invoices && data.invoices.length) {
+          data.invoices.forEach(invoice => {
+            if (invoice.outstanding_amount <= 0 || invoice.status.toLowerCase() === 'paid') {
+              showToast(`Invoice ${invoice.name} is already paid`, 'info', 5000);
+            }
+          });
+        }
       },
       onError: (err) => {
         loading.value = false;
-        errorMessage.value = err.messages?.[0] || 'Failed to fetch invoices';
-        console.error('Error fetching invoices:', err);
+        showError(err.messages?.[0] || 'Failed to fetch invoices');
       }
     });
 
@@ -334,6 +492,15 @@ export default {
       auto: true,
       onSuccess: (data) => {
         console.log('Accounts loaded:', data);
+        // Auto-select cash account if available
+        if (data.accounts && data.accounts.length && selectedPaymentMethod.value === 'cash') {
+          const cashAccount = data.accounts.find(account => 
+            account.account_name && account.account_name.toLowerCase().includes('cash')
+          );
+          if (cashAccount) {
+            paymentData.value.paid_to_account = cashAccount.name;
+          }
+        }
       },
       onError: (err) => {
         console.error('Error fetching accounts:', err);
@@ -347,10 +514,14 @@ export default {
         processingPayment.value = false;
         console.log('Payment processed:', data);
         showSuccessMessage(data);
+        // Refresh invoices to remove paid ones from UI
+        if (invoicesResource && invoicesResource.reload) {
+          invoicesResource.reload();
+        }
       },
       onError: (err) => {
         processingPayment.value = false;
-        errorMessage.value = err.messages?.[0] || 'Payment processing failed';
+        showError(err.messages?.[0] || 'Payment processing failed');
         console.error('Error processing payment:', err);
       }
     });
@@ -380,12 +551,12 @@ export default {
           openRazorpayCheckout(data);
         } else {
           processingPayment.value = false;
-          errorMessage.value = data.message || 'Failed to create payment order';
+          showError(data.message || 'Failed to create payment order');
         }
       },
       onError: (err) => {
         processingPayment.value = false;
-        errorMessage.value = err.messages?.[0] || 'Failed to create payment order';
+        showError(err.messages?.[0] || 'Failed to create payment order');
       }
     });
 
@@ -396,55 +567,78 @@ export default {
         processingPayment.value = false;
         if (data.success) {
           showSuccessMessage(data);
+          // Refresh invoices to remove paid ones from UI
+          if (invoicesResource && invoicesResource.reload) {
+            invoicesResource.reload();
+          }
         } else {
-          errorMessage.value = data.message || 'Payment verification failed';
+          showError(data.message || 'Payment verification failed');
         }
       },
       onError: (err) => {
         processingPayment.value = false;
-        errorMessage.value = err.messages?.[0] || 'Payment verification failed';
+        showError(err.messages?.[0] || 'Payment verification failed');
       }
     });
 
-    // Computed properties
-    const totalSelectedAmount = computed(() => {
-      if (!invoicesResource.data?.invoices) return 0;
-      
-      return invoicesResource.data.invoices
-        .filter(invoice => selectedInvoices.value.includes(invoice.name))
-        .reduce((total, invoice) => total + parseFloat(invoice.grand_total), 0)
-        .toFixed(2);
-    });
-
-    const isManualPaymentValid = computed(() => {
-      const basicValidation = paymentData.value.paid_to_account;
-
-      if (selectedPaymentMethod.value === 'cheque') {
-        return basicValidation && 
-               paymentData.value.cheque_no && 
-               paymentData.value.cheque_date;
-      }
-
-      return basicValidation;
-    });
-
-    const accountsList = computed(() => {
-      if (accountsResource.data && accountsResource.data.accounts) {
-        return accountsResource.data.accounts;
-      }
-      return [];
-    });
-
-    // Watch for selected invoices and auto-set paid amount
-    watch(selectedInvoices, (newVal) => {
-      if (newVal.length > 0) {
-        paymentData.value.paid_amount = totalSelectedAmount.value;
+    // Define functions after resources
+    function showToast(message, type = 'success', duration = 6000, actions = []) {
+      if (toastRef.value && toastRef.value.showToast) {
+        toastRef.value.showToast(message, type, duration, actions);
       } else {
-        paymentData.value.paid_amount = '';
+        // Fallback for toast errors
+        if (type === 'error') {
+          errorMessage.value = message;
+        }
       }
-    }, { deep: true });
+    }
 
-    // Methods
+    function showError(message) {
+      // Prevent showing the same error multiple times in quick succession
+      if (lastErrorShown.value === message) return;
+      
+      lastErrorShown.value = message;
+      showToast(message, 'error', 6000);
+      
+      // Clear after a short time to allow the same error to show again if genuinely repeated
+      setTimeout(() => {
+        lastErrorShown.value = '';
+      }, 1000);
+    }
+
+    function showSuccessMessage(data) {
+      const message = `Payment processed successfully!\nPayment Entry: ${data.payment_entry}\nAmount: ₹${data.amount || data.total_amount}\nInvoices Processed: ${data.invoices_processed ? data.invoices_processed.length : data.processed_invoices.length}`;
+      
+      showToast(
+        message,
+        'success',
+        10000,
+        data.pdf_download_url ? [
+          {
+            label: '📄 Download Receipt (Landscape)',
+            url: data.pdf_download_url,
+            target: '_blank',
+            type: 'primary',
+            closeOnClick: false
+          }
+        ] : []
+      );
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      } catch (error) {
+        return 'Invalid Date';
+      }
+    }
+
     function loadRazorpayScript() {
       if (razorpayLoaded.value) return;
 
@@ -479,7 +673,7 @@ export default {
 
       if (!paymentData.value.paid_to_account) {
         processingPayment.value = false;
-        errorMessage.value = 'Please select Account Paid To';
+        showError('Please select Account Paid To');
         return;
       }
 
@@ -493,7 +687,7 @@ export default {
 
     function openRazorpayCheckout(orderData) {
       if (!window.Razorpay) {
-        errorMessage.value = 'Razorpay payment gateway not loaded. Please refresh the page.';
+        showError('Razorpay payment gateway not loaded. Please refresh the page.');
         processingPayment.value = false;
         return;
       }
@@ -510,6 +704,8 @@ export default {
         },
         prefill: {
           name: studentInfo.value.student_name || `Student ${scannedStudentId.value}`,
+          contact: getStudentMobileNumber.value || '',
+          email: studentInfo.value.student_email_id || ''
         },
         theme: {
           color: '#10b981'
@@ -522,7 +718,7 @@ export default {
       } catch (error) {
         console.error('Error opening Razorpay checkout:', error);
         processingPayment.value = false;
-        errorMessage.value = 'Failed to open payment gateway. Please try again.';
+        showError('Failed to open payment gateway. Please try again.');
       }
     }
 
@@ -555,30 +751,10 @@ export default {
       });
     }
 
-    function showSuccessMessage(data) {
-      const message = `
-Payment processed successfully!
-Payment Entry: ${data.payment_entry}
-Amount: ₹${data.amount || data.total_amount}
-Invoices: ${data.invoices_processed ? data.invoices_processed.length : data.processed_invoices.length}
-
-${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
-      `;
-      
-      if (confirm(message) && data.pdf_download_url) {
-        // Download the PDF receipt
-        window.open(data.pdf_download_url, '_blank');
-      }
-      
-      resetScanner();
-    }
-
     function extractStudentId(input) {
-      // Match Student ID format or GR Number
+      if (!input) return '';
       const studentIdMatch = input.match(/^(EDU-STU-\d{4}-\d+)/);
       if (studentIdMatch) return studentIdMatch[1];
-      
-      // If it's a GR number, we'll search by it
       return input.trim();
     }
 
@@ -592,13 +768,13 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
         }
         processStudentId(studentId);
       } else {
-        errorMessage.value = 'Invalid QR code format';
+        showError('Invalid QR code format');
       }
     }
 
     function onScannerError(error) {
       console.error('Scanner error:', error);
-      errorMessage.value = `Scanner error: ${error}`;
+      showError(`Scanner error: ${error}`);
     }
 
     function searchStudent() {
@@ -629,9 +805,9 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
       }
     }
 
-    function selectAllInvoices() {
-      if (invoicesResource.data?.invoices) {
-        selectedInvoices.value = invoicesResource.data.invoices.map(inv => inv.name);
+    function selectAllUnpaidInvoices() {
+      if (unpaidInvoices.value.length > 0) {
+        selectedInvoices.value = unpaidInvoices.value.map(inv => inv.name);
       }
     }
 
@@ -653,18 +829,16 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
       };
       selectedPaymentMethod.value = 'cash';
       
-      if (qrScannerRef.value) {
-        setTimeout(() => {
-          qrScannerRef.value.startScanner();
-        }, 500);
-      }
-    }
-
-    function getMonthName(dateString) {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-IN', { 
-        month: 'long',
-        year: 'numeric'
+      // Focus on search input after reset
+      nextTick(() => {
+        if (searchInputRef.value) {
+          searchInputRef.value.focus();
+        }
+        if (qrScannerRef.value) {
+          setTimeout(() => {
+            qrScannerRef.value.startScanner();
+          }, 500);
+        }
       });
     }
 
@@ -672,8 +846,47 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
       return new Date().toISOString().split('T')[0];
     }
 
+    // Set up watchers after all functions are defined
+    watch(selectedPaymentMethod, (newMethod) => {
+      if (newMethod === 'cash' && accountsList.value.length > 0) {
+        const cashAccount = accountsList.value.find(account => 
+          account.account_name && account.account_name.toLowerCase().includes('cash')
+        );
+        if (cashAccount) {
+          paymentData.value.paid_to_account = cashAccount.name;
+        }
+      }
+    });
+
+    watch(accountsList, (newAccounts) => {
+      if (newAccounts.length > 0 && selectedPaymentMethod.value === 'cash') {
+        const cashAccount = newAccounts.find(account => 
+          account.account_name && account.account_name.toLowerCase().includes('cash')
+        );
+        if (cashAccount) {
+          paymentData.value.paid_to_account = cashAccount.name;
+        }
+      }
+    });
+
+    watch(selectedInvoices, (newVal) => {
+      if (newVal.length > 0) {
+        paymentData.value.paid_amount = totalSelectedAmount.value;
+      } else {
+        paymentData.value.paid_amount = '';
+      }
+    }, { deep: true });
+
+    // Auto-focus on search input when page loads
+    onMounted(() => {
+      nextTick(() => {
+        if (searchInputRef.value) {
+          searchInputRef.value.focus();
+        }
+      });
+    });
+
     return {
-      // State
       scannedStudentId,
       searchQuery,
       selectedInvoices,
@@ -682,83 +895,40 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
       processingPayment,
       paymentData,
       qrScannerRef,
+      searchInputRef,
       selectedPaymentMethod,
       razorpaySettingsConfigured,
       studentInfo,
-      
-      // Resources
       invoicesResource,
       accountsResource,
       processPaymentResource,
       razorpayOrderResource,
       verifyPaymentResource,
       razorpaySettingsResource,
-      
-      // Computed
       totalSelectedAmount,
       isManualPaymentValid,
       accountsList,
-      
-      // Methods
+      toastRef,
+      unpaidInvoices,
+      unpaidInvoicesCount,
       onQRCodeScanned,
       onScannerError,
       searchStudent,
       toggleInvoiceSelection,
-      selectAllInvoices,
+      selectAllUnpaidInvoices,
       deselectAllInvoices,
       resetScanner,
       processManualPayment,
       initiateRazorpayPayment,
-      getMonthName,
-      getTodayDate
+      getTodayDate,
+      formatDate
     };
   }
 };
 </script>
 
 <style scoped>
-.qr-payment-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 1.5rem;
-  min-height: 100vh;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 0.5rem;
-}
-
-.subtitle {
-  color: #6b7280;
-  font-size: 1rem;
-}
-
-/* Form Cards */
-.form-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
-}
-
-.form-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 1rem;
-}
-
-/* Search Section */
+/* Your existing CSS styles remain the same */
 .search-section {
   display: flex;
   flex-direction: column;
@@ -801,6 +971,24 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   flex: 1;
 }
 
+.input-with-icon .input {
+  width: 100%;
+  padding-left: 2.5rem !important;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background: white;
+}
+
+.input-with-icon .input:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
 .search-icon {
   position: absolute;
   left: 0.75rem;
@@ -809,72 +997,43 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   width: 1.25rem;
   height: 1.25rem;
   color: #9ca3af;
+  pointer-events: none;
+  z-index: 10;
 }
 
-.search-input {
-  width: 100%;
-  padding: 0.75rem 0.75rem 0.75rem 2.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: all 0.2s;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-}
-
-.search-button {
-  padding: 0.75rem 1.5rem;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-  white-space: nowrap;
-}
-
-.search-button:hover:not(:disabled) {
-  background: #059669;
-}
-
-.search-button:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-/* Student Header */
-.student-header {
+.student-profile-header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.student-info {
+.student-avatar-large {
+  flex-shrink: 0;
+}
+
+.student-main-info {
   flex: 1;
 }
 
 .student-name {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: #1f2937;
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.75rem 0;
 }
 
 .student-meta {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
 
 .student-id,
-.gr-number {
+.student-name-id {
   font-size: 0.875rem;
   color: #6b7280;
   background: #f3f4f6;
@@ -882,53 +1041,105 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   border-radius: 4px;
 }
 
-.icon-button {
+.student-name-id {
+  background: #faf5ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.contact-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.contact-label {
+  font-weight: 500;
   color: #374151;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: all 0.2s;
 }
 
-.icon-button:hover {
-  background: #f1f5f9;
+.contact-value {
+  color: #6b7280;
 }
 
-.icon {
-  width: 1rem;
-  height: 1rem;
+.guardians-section {
+  margin-bottom: 1.5rem;
 }
 
-/* Messages */
-.message {
-  padding: 0.75rem 1rem;
+.guardians-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.guardian-card {
+  padding: 1rem;
+  background: #f8fafc;
   border-radius: 8px;
-  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.guardian-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+}
+
+.guardian-relation {
   font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+  font-style: italic;
 }
 
-.message.error {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+.guardian-contact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #374151;
+  margin-bottom: 0.25rem;
 }
 
-/* Empty State */
+.contact-icon {
+  font-size: 1rem;
+}
+
+.student-groups-section {
+  margin-bottom: 1.5rem;
+}
+
+.groups-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.group-tag {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border: 1px solid #bae6fd;
+}
+
+.group-roll {
+  color: #0c4a6e;
+  font-weight: 500;
+}
+
 .empty-state {
   text-align: center;
   padding: 2rem;
   color: #6b7280;
-}
-
-.empty-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
 }
 
 .empty-state h3 {
@@ -942,19 +1153,11 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   font-size: 0.875rem;
 }
 
-/* Section Header */
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
-}
-
-.section-header h3 {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #374151;
 }
 
 .selection-controls {
@@ -978,7 +1181,6 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   background: #f0fdf4;
 }
 
-/* Invoices Grid */
 .invoices-grid {
   display: flex;
   flex-direction: column;
@@ -1047,46 +1249,94 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   color: #6b7280;
 }
 
-.invoice-amount {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #dc2626;
-  white-space: nowrap;
-}
-
-.invoice-details {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.detail-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.detail-label {
+.invoice-date {
   font-size: 0.75rem;
   color: #6b7280;
+  margin: 0.25rem 0 0 0;
 }
 
-.due-date {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #374151;
-  background: #f3f4f6;
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
+.invoice-amounts {
+  text-align: right;
+}
+
+.invoice-total {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 0.25rem;
 }
 
 .outstanding-amount {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  color: #ef4444;
   font-weight: 600;
-  color: #dc2626;
 }
 
-/* Payment Section */
+.invoice-items {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.items-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: normal;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.item-pricing {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+.item-amount {
+  font-weight: 600;
+  color: #dc2626;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
 .payment-summary {
   display: flex;
   justify-content: space-between;
@@ -1112,37 +1362,6 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   color: #dc2626;
 }
 
-/* Form Groups */
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
-}
-
-.select-input,
-.input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.select-input:focus,
-.input:focus {
-  outline: none;
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-}
-
-/* Payment Methods */
 .payment-methods {
   display: flex;
   gap: 0.75rem;
@@ -1187,7 +1406,6 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   font-size: 1.5rem;
 }
 
-/* Cheque Fields */
 .cheque-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1195,116 +1413,66 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
   margin-bottom: 1.5rem;
 }
 
-/* Payment Action */
-.payment-action {
+.invoice-details {
   display: flex;
-  justify-content: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.pay-button {
-  padding: 0.75rem 2rem;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-  min-width: 140px;
-}
-
-.pay-button:hover:not(:disabled) {
-  background: #059669;
-}
-
-.pay-button:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-.pay-button.online {
-  background: #6366f1;
-}
-
-.pay-button.online:hover:not(:disabled) {
-  background: #4f46e5;
-}
-
-.button-content {
+.detail-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  justify-content: center;
 }
 
-.spinner {
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid transparent;
-  border-top: 2px solid currentColor;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.detail-label {
+  font-size: 0.75rem;
+  color: #6b7280;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Loading Overlay */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.loading-modal {
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
-  text-align: center;
-  min-width: 200px;
-}
-
-.loading-spinner {
-  width: 2rem;
-  height: 2rem;
-  border: 3px solid #e5e7eb;
-  border-top: 3px solid #10b981;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-.loading-title {
-  font-size: 1rem;
-  font-weight: 600;
+.due-date {
+  font-size: 0.75rem;
+  font-weight: 500;
   color: #374151;
-  margin: 0;
+  background: #f3f4f6;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
 }
 
-/* Responsive Design */
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-badge.paid {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge.unpaid {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.status-badge.draft {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
 @media (max-width: 768px) {
-  .qr-payment-container {
-    padding: 1rem;
-  }
-
-  .form-card {
-    padding: 1rem;
-  }
-
-  .student-header {
+  .student-profile-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
+  }
+
+  .guardians-grid {
+    grid-template-columns: 1fr;
   }
 
   .search-input-group {
@@ -1337,16 +1505,6 @@ ${data.pdf_download_url ? 'Click OK to download the receipt.' : ''}
 
   .summary-item.total {
     text-align: left;
-  }
-}
-
-@media (max-width: 480px) {
-  .title {
-    font-size: 1.5rem;
-  }
-
-  .form-title {
-    font-size: 1.125rem;
   }
 
   .invoices-grid {

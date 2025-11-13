@@ -560,8 +560,8 @@ function usePreviousData(selectedData) { // 🆕 ADD 'function' keyword
   gap: 20px;
   position: sticky;
   bottom: 0;
-  background: white;
-  border-top: 1px solid #e2e8f0;
+  /* background: white;
+  border-top: 1px solid #e2e8f0; */
   margin-top: auto;
 }
 

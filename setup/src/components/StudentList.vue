@@ -2,15 +2,20 @@
   <div class="student-list-container">
     <!-- Header -->
     <div class="student-list-header">
-      <h3 class="student-list-title">{{ studentGroup.name }} - Fee Category Selection</h3>
+      <h3 class="student-list-title">
+        {{ isFeeScheduleMode ? studentGroup.name + ' - Fee Category Selection' : studentGroup.name + ' - Student Management' }}
+      </h3>
       <div class="header-actions">
         <button 
+          v-if="isFeeScheduleMode" 
           @click="saveSelections" 
           class="save-button"
         >
           Save Selections
         </button>
+        <!-- Only show close button in Fee Schedule mode -->
         <button 
+          v-if="isFeeScheduleMode"
           @click="$emit('close')" 
           class="close-button"
         >
@@ -25,18 +30,22 @@
         <span class="stat-label">Total Students:</span>
         <span class="stat-value">{{ studentGroup.students?.length || 0 }}</span>
       </div>
-      <div class="stat-item">
+      <div v-if="isFeeScheduleMode" class="stat-item">
         <span class="stat-label">Fee Categories:</span>
         <span class="stat-value">{{ feeCategories.length }}</span>
       </div>
-      <div class="stat-item">
+      <div v-if="isFeeScheduleMode" class="stat-item">
         <span class="stat-label">Students with Exceptions:</span>
         <span class="stat-value">{{ getStudentsWithExceptionsCount() }}</span>
+      </div>
+      <div v-if="!isFeeScheduleMode" class="stat-item">
+        <span class="stat-label">Selected Students:</span>
+        <span class="stat-value">{{ selectedStudentsCount }}</span>
       </div>
     </div>
 
     <!-- Bulk Actions -->
-    <div class="bulk-actions">
+    <div v-if="isFeeScheduleMode" class="bulk-actions">
       <h4 class="bulk-actions-title">Bulk Actions</h4>
       <div class="bulk-buttons">
         <button 
@@ -68,27 +77,76 @@
       </div>
     </div>
 
+    <!-- Student Selection Bulk Actions (for Students page) -->
+    <div v-if="!isFeeScheduleMode" class="bulk-actions">
+      <h4 class="bulk-actions-title">Student Selection</h4>
+      <div class="bulk-buttons">
+        <button 
+          @click="selectAllStudents" 
+          class="bulk-category-button"
+        >
+          Select All
+        </button>
+        <button 
+          @click="unselectAllStudents" 
+          class="bulk-category-button"
+        >
+          Unselect All
+        </button>
+        <button 
+          @click="deleteSelectedStudents" 
+          class="bulk-delete-button"
+          :disabled="selectedStudentsCount === 0"
+        >
+          Delete Selected ({{ selectedStudentsCount }})
+        </button>
+      </div>
+    </div>
+
     <!-- Students List -->
     <div class="students-grid">
       <div 
         v-for="student in studentGroup.students" 
         :key="student.student"
         class="student-card"
+        :class="{ 
+          'selected-student': isStudentSelected(student.student),
+          'compact-card': !isFeeScheduleMode 
+        }"
+        @click="!isFeeScheduleMode ? handleCardClick(student) : null"
       >
+        <!-- Student Selection Checkbox (for Students page) -->
+        <div v-if="!isFeeScheduleMode" class="student-selection-checkbox">
+          <label class="selection-checkbox-label">
+            <input 
+              type="checkbox"
+              :checked="isStudentSelected(student.student)"
+              @change="toggleStudentSelection(student.student, $event.target.checked)"
+              class="student-checkbox"
+            />
+            <span class="selection-checkbox-custom"></span>
+          </label>
+        </div>
+
+        <!-- Edit Button (for Students page) -->
+        <div v-if="!isFeeScheduleMode" class="student-edit-button">
+          <button 
+            @click.stop="handleStudentClick(student)" 
+            class="edit-button"
+            title="Edit Student"
+          >
+            ✏️
+          </button>
+        </div>
+
         <!-- Student Basic Info -->
         <div class="student-basic-info">
-          <div class="student-avatar">
-            <img
-              v-if="student.student_image"
-              :src="getProfileImageUrl(student.student_image)"
-              alt="Student"
-              class="avatar-image"
-              @error="handleImageError"
-            />
-            <div v-else class="avatar-placeholder">
-              {{ getInitials(student.student_name) }}
-            </div>
-          </div>
+          <StudentAvatar
+            :image-url="getStudentImageUrl(student)"
+            :student-name="student.student_name"
+            alt-text="Student"
+            @error="handleImageError"
+          />
           
           <div class="student-details">
             <h4 class="student-name">{{ student.student_name }}</h4>
@@ -97,8 +155,8 @@
           </div>
         </div>
 
-        <!-- Fee Categories Checkboxes -->
-        <div v-if="feeCategories.length > 0" class="fee-categories-section">
+        <!-- Fee Categories Checkboxes (only for Fee Schedule mode) -->
+        <div v-if="isFeeScheduleMode && feeCategories.length > 0" class="fee-categories-section">
           <h5 class="fee-categories-title">Select Fee Categories</h5>
           <div class="fee-categories-checkboxes">
             <div 
@@ -143,7 +201,7 @@
         </div>
 
         <!-- No Fee Categories Message -->
-        <div v-else class="no-categories-message">
+        <div v-else-if="isFeeScheduleMode" class="no-categories-message">
           <p>No fee categories available</p>
         </div>
       </div>
@@ -154,8 +212,8 @@
       <p class="empty-message">No students found in this group</p>
     </div>
 
-    <!-- Actions Footer -->
-    <div class="actions-footer">
+    <!-- Actions Footer (only for Fee Schedule mode) -->
+    <div v-if="isFeeScheduleMode" class="actions-footer">
       <button 
         @click="saveSelections" 
         class="save-button"
@@ -174,6 +232,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import StudentAvatar from './StudentAvatar.vue'
 
 const props = defineProps({
   studentGroup: {
@@ -188,16 +247,25 @@ const props = defineProps({
   initialSelections: {
     type: Object,
     default: () => ({})
+  },
+  mode: {
+    type: String,
+    default: 'fee-schedule' // 'fee-schedule' or 'students'
   }
 })
 
-const emit = defineEmits(['save', 'close'])
+const emit = defineEmits(['save', 'close', 'student-clicked', 'student-deleted', 'refresh', 'students-selected-for-delete'])
 
-// Reactive state for student fee category selections
-const studentSelections = ref({})
+// Reactive state
+const studentSelections = ref({}) // For fee category selections
+const selectedStudents = ref(new Set()) // For student selection in Students mode
 
 // Computed properties
+const isFeeScheduleMode = computed(() => props.mode === 'fee-schedule')
+
 const feeCategories = computed(() => {
+  if (!isFeeScheduleMode.value) return []
+  
   const allCategories = []
   props.feeStructures.forEach(structure => {
     if (structure.components) {
@@ -216,7 +284,9 @@ const feeCategories = computed(() => {
   return allCategories
 })
 
-// Methods
+const selectedStudentsCount = computed(() => selectedStudents.value.size)
+
+// Methods for Fee Schedule Mode
 const isCategorySelected = (studentId, category) => {
   return studentSelections.value[studentId]?.includes(category) || false
 }
@@ -294,34 +364,86 @@ const saveSelections = () => {
   emit('save', exceptions)
 }
 
-const getProfileImageUrl = (imgUrl) => {
-  if (!imgUrl) return null
-  if (imgUrl.startsWith('http') || imgUrl.startsWith('//')) {
-    return imgUrl
-  }
-  if (imgUrl.startsWith('/')) {
-    return window.location.origin + imgUrl
-  }
-  const baseUrl = window.location.origin
-  return `${baseUrl}/${imgUrl.replace(/^\//, '')}`
+// Methods for Students Mode
+const isStudentSelected = (studentId) => {
+  return selectedStudents.value.has(studentId)
 }
 
-const getInitials = (name) => {
-  if (!name) return '?'
-  return name
-    .split(' ')
-    .map(part => part.charAt(0))
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
+const toggleStudentSelection = (studentId, isSelected) => {
+  if (isSelected) {
+    selectedStudents.value.add(studentId)
+  } else {
+    selectedStudents.value.delete(studentId)
+  }
+}
+
+const handleCardClick = (student) => {
+  // Toggle selection when card is clicked
+  const isCurrentlySelected = isStudentSelected(student.student)
+  toggleStudentSelection(student.student, !isCurrentlySelected)
+}
+
+const selectAllStudents = () => {
+  props.studentGroup.students?.forEach(student => {
+    selectedStudents.value.add(student.student)
+  })
+}
+
+const unselectAllStudents = () => {
+  selectedStudents.value.clear()
+}
+
+const deleteSelectedStudents = () => {
+  if (selectedStudents.value.size === 0) return
+  
+  const studentIds = Array.from(selectedStudents.value)
+  emit('students-selected-for-delete', studentIds)
+}
+
+const handleStudentClick = (student) => {
+  console.log('📤 Emitting student data for edit:', {
+    student: student.student,
+    student_name: student.student_name, 
+    group_roll_number: student.group_roll_number,
+    student_image: student.student_image, // ← Use student_image
+    address: student.address,
+    mobile: student.mobile
+  })
+  
+  emit('student-clicked', {
+    student: student.student,
+    student_name: student.student_name,
+    group_roll_number: student.group_roll_number,
+    student_image: student.student_image, // ← This is crucial
+    address: student.address,
+    mobile: student.mobile
+  })
+}
+
+// In StudentList.vue, update the getStudentImageUrl method:
+const getStudentImageUrl = (student) => {
+  const imageUrl = student.student_image || student.img_url || student.image || ''
+  
+  // Debug: Check what image URL we actually have
+  console.log('🖼️ Student image debug:', {
+    student: student.student,
+    student_image: student.student_image,
+    img_url: student.img_url,
+    image: student.image,
+    finalUrl: imageUrl
+  })
+  
+  return imageUrl
 }
 
 const handleImageError = (event) => {
-  event.target.style.display = 'none'
+  console.log('Image failed to load', event)
 }
 
-// Initialization
+// Initialization for Fee Schedule Mode
 const initializeSelections = () => {
+  if (!isFeeScheduleMode.value) return
+  
   // If we have meaningful initial selections, use them
   if (props.initialSelections && Object.keys(props.initialSelections).length > 0) {
     const hasData = Object.values(props.initialSelections).some(
@@ -343,29 +465,211 @@ const initializeSelections = () => {
 
 // Lifecycle
 onMounted(() => {
-  initializeSelections()
+  if (isFeeScheduleMode.value) {
+    initializeSelections()
+  }
 })
 
-// Watch for prop changes
+// Watch for prop changes (Fee Schedule mode only)
 watch(() => props.initialSelections, (newSelections) => {
-  if (newSelections && Object.keys(newSelections).length > 0) {
+  if (isFeeScheduleMode.value && newSelections && Object.keys(newSelections).length > 0) {
     initializeSelections()
   }
 }, { deep: true })
 
 watch(() => props.studentGroup, () => {
-  initializeSelections()
+  if (isFeeScheduleMode.value) {
+    initializeSelections()
+  }
 }, { deep: true })
 
 watch(() => props.feeStructures, () => {
-  nextTick(() => {
-    initializeSelections()
-  })
+  if (isFeeScheduleMode.value) {
+    nextTick(() => {
+      initializeSelections()
+    })
+  }
 }, { deep: true })
 </script>
 
 <style scoped>
-/* Add this new style for partial selection warning */
+/* Alternative: Use a class-based approach */
+.compact-card .edit-button {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0.2rem;
+  font-size: 0.7rem;
+  background: rgba(59, 130, 246, 0.2); /* Light blue with transparency */
+  border: 1px solid rgba(59, 130, 246, 0.3); /* Light blue border */
+  color: #3b82f6; /* Blue text color */
+  backdrop-filter: blur(5px); /* Optional: adds blur effect for better transparency */
+}
+
+.compact-card .edit-button:hover {
+  background: rgba(59, 130, 246, 0.3); /* Slightly more opaque on hover */
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: scale(1.05);
+}
+.compact-card {
+  padding: 0.375rem;
+  min-height: 60px; /* Slightly increased to accommodate bigger text */
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.compact-card .student-basic-info {
+  margin-bottom: 0;
+  margin-left: 2.5rem;
+  gap: 1.5rem;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-height: 45px; /* Slightly increased */
+}
+
+/* .compact-card .student-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-right: 1rem;
+  align-self: center;
+} */
+
+.compact-card .student-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 32px;
+  padding-left: 0.5rem;
+  align-self: center;
+}
+
+.compact-card .student-name {
+  font-size: 0.9rem; /* Increased from 0.75rem */
+  margin: 0 0 0.1rem 0;
+  line-height: 1.2;
+  font-weight: 600; /* Make it bolder */
+}
+
+.compact-card .student-roll {
+  font-size: 0.8rem; /* Increased from 0.6rem */
+  margin: 0 0 0.05rem 0;
+  line-height: 1.2;
+}
+
+.compact-card .student-id {
+  font-size: 0.7rem; /* Increased from 0.55rem */
+  margin: 0;
+  line-height: 1.2;
+  color: #6b7280; /* Make ID less prominent */
+}
+
+/* Add new styles for student selection and edit button */
+.student-selection-checkbox {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+}
+
+.student-edit-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+}
+
+.student-basic-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  margin-left: 2.5rem; /* Add left margin to push content away from checkbox */
+}
+
+.selection-checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.student-checkbox {
+  display: none;
+}
+
+.selection-checkbox-custom {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.student-checkbox:checked + .selection-checkbox-custom {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.student-checkbox:checked + .selection-checkbox-custom::after {
+  content: '✓';
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.selected-student {
+  border-color: #3b82f6 !important;
+  background: #f0f9ff !important;
+}
+
+.edit-button {
+  padding: 0.5rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-button:hover {
+  background: #2563eb;
+  transform: scale(1.1);
+}
+
+.bulk-delete-button {
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bulk-delete-button:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.bulk-delete-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Existing styles remain the same */
 .partial-selection-warning {
   font-size: 0.75rem;
   color: #d97706;
@@ -388,7 +692,6 @@ watch(() => props.feeStructures, () => {
   background: #059669;
 }
 
-/* Your existing styles remain the same */
 .student-list-container {
   background: white;
   border-radius: 12px;
@@ -529,6 +832,8 @@ watch(() => props.feeStructures, () => {
   border-radius: 0.75rem;
   padding: 1.25rem;
   transition: all 0.3s ease;
+  position: relative;
+  cursor: pointer;
 }
 
 .student-card:hover {
@@ -541,30 +846,6 @@ watch(() => props.feeStructures, () => {
   align-items: center;
   gap: 1rem;
   margin-bottom: 1rem;
-}
-
-.student-avatar {
-  flex-shrink: 0;
-}
-
-.avatar-image {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  font-size: 0.875rem;
 }
 
 .student-details {
